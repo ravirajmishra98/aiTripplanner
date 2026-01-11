@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createTripPlan } from '../utils/tripPlanner';
 import { generateAIItinerary, explainTripPlanWithAI, getFlightRecommendation, getHotelRecommendation, getHotelRecommendations } from '../services/aiService';
+import { getImageUrl } from '../services/imageService';
 
 function TripPlanPage({ 
   isDesktop, 
@@ -21,6 +22,37 @@ function TripPlanPage({
   const [flightRec, setFlightRec] = useState(null);
   const [hotelRec, setHotelRec] = useState(null);
   const [hotelsList, setHotelsList] = useState(null);
+  const [heroImage, setHeroImage] = useState(null);
+  const [fallbackHeroUrl, setFallbackHeroUrl] = useState(null);
+  const [preferredTransport, setPreferredTransport] = useState('flight');
+  const [availableTransports, setAvailableTransports] = useState(['flight']);
+
+  // Indian cities list for domestic vs international detection
+  const INDIAN_CITIES = [
+    'Mumbai', 'Delhi', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 
+    'Ahmedabad', 'Jaipur', 'Lucknow', 'Chandigarh', 'Indore', 'Goa', 'Kerala',
+    'Shimla', 'Manali', 'Udaipur', 'Varanasi', 'Rishikesh', 'Ooty', 'Coorg',
+    'Agra', 'Rajasthan', 'Gujarat', 'Maharashtra', 'Karnataka', 'Tamil Nadu',
+    'Uttarakhand', 'Himachal Pradesh', 'Delhi NCR', 'Guwahati', 'Kochi'
+  ];
+
+  // Determine available transport modes based on source and destination
+  const getAvailableTransports = (src, dest) => {
+    const isSrcIndia = !src || INDIAN_CITIES.some(city => src.toLowerCase().includes(city.toLowerCase()));
+    const isDestIndia = INDIAN_CITIES.some(city => dest.toLowerCase().includes(city.toLowerCase()));
+    
+    if (isSrcIndia && isDestIndia) {
+      return ['flight', 'train', 'bus'];
+    }
+    return ['flight'];
+  };
+
+  // Random city hero fallback on mount
+  useEffect(() => {
+    const randomCities = ['Goa', 'Kerala', 'Jaipur', 'Manali', 'Udaipur', 'Rishikesh', 'Shimla', 'Ooty', 'Coorg', 'Varanasi'];
+    const randomCity = randomCities[Math.floor(Math.random() * randomCities.length)];
+    getImageUrl({ category: 'destination', cityName: randomCity }).then(url => setFallbackHeroUrl(url)).catch(() => {});
+  }, []);
 
   // Handle incoming router state
   useEffect(() => {
@@ -84,6 +116,21 @@ function TripPlanPage({
       }
     }
   }, [location.state]);
+
+  // Calculate available transports and set preferred option
+  useEffect(() => {
+    if (lastPlan && lastPlan.parsed) {
+      const src = lastPlan.parsed.sourceCity || '';
+      const dest = lastPlan.parsed.destinationCity || '';
+      const available = getAvailableTransports(src, dest);
+      setAvailableTransports(available);
+      
+      // Reset to first available option if current preference isn't available
+      if (!available.includes(preferredTransport)) {
+        setPreferredTransport(available[0]);
+      }
+    }
+  }, [lastPlan]);
 
   // Generate AI itinerary
   useEffect(() => {
@@ -166,6 +213,16 @@ function TripPlanPage({
     setExpandedDay(expandedDay === dayNumber ? null : dayNumber);
   };
 
+  // Load destination hero image (runs whenever destination changes)
+  useEffect(() => {
+    if (!lastPlan?.parsed?.destinationCity) return;
+    const loadHero = async () => {
+      const url = await getImageUrl({ cityName: lastPlan.parsed.destinationCity, countryName: '', category: 'destination' });
+      setHeroImage(url);
+    };
+    loadHero();
+  }, [lastPlan?.parsed?.destinationCity]);
+
   if (!lastPlan || !lastPlan.parsed) {
     return (
       <div style={{
@@ -238,6 +295,42 @@ function TripPlanPage({
         margin: '0 auto',
         padding: isDesktop ? '48px 24px' : '32px 16px'
       }}>
+        {/* Hero */}
+        <div style={{
+          width: '100%',
+          height: isDesktop ? 240 : 180,
+          borderRadius: 16,
+          marginBottom: 28,
+          overflow: 'hidden',
+          position: 'relative',
+          background: heroImage
+            ? `linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.45) 100%), url(${heroImage}) center/cover`
+            : fallbackHeroUrl
+            ? `linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.45) 100%), url(${fallbackHeroUrl}) center/cover`
+            : 'linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 100%)'
+        }}>
+          <div style={{
+            position: 'absolute',
+            bottom: 14,
+            left: 18,
+            background: 'rgba(15, 23, 42, 0.85)',
+            color: '#ffffff',
+            padding: '10px 14px',
+            borderRadius: 10,
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center',
+            fontSize: isDesktop ? 16 : 14,
+            fontWeight: 700
+          }}>
+            <span>📍 {parsed.destinationCity}</span>
+            <span style={{
+              fontSize: 12,
+              color: '#e2e8f0',
+              fontWeight: 600
+            }}>{parsed.numberOfDays} days · {parsed.travelType || 'Leisure'}</span>
+          </div>
+        </div>
         {/* 1. TRIP SNAPSHOT */}
         <div style={{
           marginBottom: 48
@@ -990,12 +1083,44 @@ function TripPlanPage({
             fontSize: 14,
             fontWeight: 600,
             color: '#64748b',
-            marginBottom: 24,
+            marginBottom: 16,
             textTransform: 'uppercase',
             letterSpacing: '0.05em'
           }}>
             Book Your Trip
           </h3>
+
+          {/* Transport Mode Selection (only for domestic trips with multiple options) */}
+          {availableTransports.length > 1 && (
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 8, display: 'block' }}>
+                Preferred Transport Mode
+              </label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {availableTransports.map(transport => (
+                  <button
+                    key={transport}
+                    onClick={() => setPreferredTransport(transport)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: 6,
+                      background: preferredTransport === transport ? '#1976d2' : '#e2e8f0',
+                      border: `2px solid ${preferredTransport === transport ? '#1976d2' : '#cbd5e1'}`,
+                      color: preferredTransport === transport ? '#fff' : '#0f172a',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {transport === 'flight' && '✈️ Flight'}
+                    {transport === 'train' && '🚂 Train'}
+                    {transport === 'bus' && '🚌 Bus'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Booking Actions */}
           <div style={{
@@ -1003,6 +1128,7 @@ function TripPlanPage({
             gap: 16,
             flexWrap: 'wrap'
           }}>
+            {availableTransports.includes('flight') && (
             <button
               onClick={() => {
                 const dest = parsed.destinationCity || '';
@@ -1017,19 +1143,81 @@ function TripPlanPage({
               style={{
                 padding: '14px 28px',
                 borderRadius: 6,
-                background: '#0f172a',
+                background: preferredTransport === 'flight' ? '#1976d2' : '#0f172a',
                 border: 'none',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 500,
                 cursor: 'pointer',
-                transition: 'all 0.2s'
+                transition: 'all 0.2s',
+                boxShadow: preferredTransport === 'flight' ? '0 2px 8px rgba(25,118,210,0.3)' : 'none'
               }}
               onMouseEnter={(e) => e.target.style.opacity = '0.8'}
               onMouseLeave={(e) => e.target.style.opacity = '1'}
             >
-              Book Flight
+              ✈️ Book Flight
             </button>
+            )}
+            {availableTransports.includes('train') && (
+            <button
+              onClick={() => {
+                const dest = parsed.destinationCity || '';
+                const src = parsed.sourceCity || '';
+                const today = new Date();
+                const start = today.toISOString().slice(0, 10);
+                const trainUrl = src 
+                  ? `https://www.google.com/search?q=trains+from+${encodeURIComponent(src)}+to+${encodeURIComponent(dest)}+${start}`
+                  : `https://www.google.com/search?q=trains+to+${encodeURIComponent(dest)}+${start}`;
+                window.open(trainUrl, '_blank');
+              }}
+              style={{
+                padding: '14px 28px',
+                borderRadius: 6,
+                background: preferredTransport === 'train' ? '#1976d2' : '#0f172a',
+                border: 'none',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: preferredTransport === 'train' ? '0 2px 8px rgba(25,118,210,0.3)' : 'none'
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.target.style.opacity = '1'}
+            >
+              🚂 Book Train
+            </button>
+            )}
+            {availableTransports.includes('bus') && (
+            <button
+              onClick={() => {
+                const dest = parsed.destinationCity || '';
+                const src = parsed.sourceCity || '';
+                const today = new Date();
+                const start = today.toISOString().slice(0, 10);
+                const busUrl = src 
+                  ? `https://www.google.com/search?q=buses+from+${encodeURIComponent(src)}+to+${encodeURIComponent(dest)}+${start}`
+                  : `https://www.google.com/search?q=buses+to+${encodeURIComponent(dest)}+${start}`;
+                window.open(busUrl, '_blank');
+              }}
+              style={{
+                padding: '14px 28px',
+                borderRadius: 6,
+                background: preferredTransport === 'bus' ? '#1976d2' : '#0f172a',
+                border: 'none',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: preferredTransport === 'bus' ? '0 2px 8px rgba(25,118,210,0.3)' : 'none'
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.target.style.opacity = '1'}
+            >
+              🚌 Book Bus
+            </button>
+            )}
             <button
               onClick={() => {
                 const dest = parsed.destinationCity || '';
@@ -1059,7 +1247,7 @@ function TripPlanPage({
               onMouseEnter={(e) => e.target.style.opacity = '0.8'}
               onMouseLeave={(e) => e.target.style.opacity = '1'}
             >
-              Book Hotel
+              🏨 Book Hotel
             </button>
           </div>
         </div>

@@ -20,27 +20,38 @@ async function generateAIItinerary({ sourceCity, destinationCity, numberOfDays, 
       ? 'This is a solo trip - include flexible activities, social opportunities, and safe exploration options.'
       : 'Keep activities practical and enjoyable for general travelers.';
 
-    const prompt = `You are a travel planning assistant. Generate a realistic, practical, and relaxed ${numberOfDays}-day itinerary for a trip from ${sourceCity} to ${destinationCity}.
+    const prompt = `Generate a ${numberOfDays}-day itinerary for ${sourceCity} to ${destinationCity}.
 
 ${familyNote}
 
-Guidelines:
-- Day 1: Arrival, check-in, light exploration
-- Middle days: Mix of sightseeing, local experiences, and relaxation
-- Last day: Leisurely morning, pack up, departure
-- Keep the pace relaxed - avoid cramming too many activities
-- Include realistic activities that travelers can actually do
-- Focus on popular attractions, local food, and cultural experiences${additionalContext}
+Grounding requirements (no exceptions):
+- Each time block must name real, destination-specific landmarks, attractions, neighborhoods, or famous experiences. No generic placeholders.
+- Always include well-known, iconic, must-visit places for the destination city across the trip.
+- Forbid vague actions like "walk around" unless tied to a named place/area (e.g., "stroll the Colaba Causeway markets").
+- Balance sightseeing, food, culture, and downtime; keep a relaxed, realistic pace (max 1-2 anchor stops per block).
 
-IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explanation text.
+Day structure (concise, scannable):
+- Morning (8-12): Specific landmark/museum/temple/park + short why relevant.
+- Afternoon (12-5): Named attraction + food stop with a specific dish or cuisine at a real/typical place.
+- Evening (5-10): Named neighborhood/market/waterfront/show + dinner spot or street-food lane.
 
-Use this exact JSON structure:
+Trip flow rules:
+- Day 1: Arrival logistics, light exploration near stay, one iconic/easy nearby highlight.
+- Middle days: Cover top landmarks + a local cultural/food experience each day.
+- Last day: One meaningful stop, checkout, and departure prep.
+- Be realistic about travel time and energy.
+
+Output format (JSON only, no prose):
+"plan": "Morning: [specific place + brief activity]. Afternoon: [specific place + food dish at venue/type]. Evening: [specific area/market/show + dinner at named/typical spot]."
+
+Respond with ONLY valid JSON. No markdown, no explanations.
+
 {
   "itinerary": [
     {
       "day": 1,
-      "title": "Arrival and City Introduction",
-      "plan": "Arrive in ${destinationCity}, check into your hotel, take an evening stroll around the neighborhood, and enjoy local cuisine at a nearby restaurant."
+      "title": "Arrival & First Impressions",
+      "plan": "Afternoon: Check-in, rest. Evening: Explore [named area] near stay; dinner at [specific/typical spot] for [dish]."
     }
   ]
 }`;
@@ -50,7 +61,7 @@ Use this exact JSON structure:
       messages: [
         {
           role: 'system',
-          content: 'You are a travel planning assistant. Always respond with valid JSON only. Never use markdown formatting or code blocks.'
+          content: 'You generate travel itineraries. Output valid JSON only. Be specific with place names, activities, and food. Use time blocks (Morning/Afternoon/Evening). No markdown, no filler text.'
         },
         {
           role: 'user',
@@ -129,33 +140,29 @@ async function explainTripPlanWithAI(tripPlan) {
       return null;
     }
 
-    const prompt = `You are a confident travel advisor. Explain in 2-3 short, simple bullet points why this trip plan works well for the traveler.
+    const prompt = `Explain why this trip plan is well-designed. Give 2-3 concrete benefits.
 
-Trip Details:
-- From: ${parsed.sourceCity || 'your city'} to ${parsed.destinationCity}
-- Duration: ${parsed.numberOfDays} days
-- Travel type: ${parsed.travelType || 'general'}
-- Flight timing: ${flight?.timing || 'morning'}, ${flight?.type || 'direct'}
-- Hotel area: ${hotelArea?.area || 'city center'}
+Trip: ${parsed.sourceCity || 'Home'} → ${parsed.destinationCity}, ${parsed.numberOfDays} days, ${parsed.travelType || 'leisure'}
+Flight: ${flight?.timing || 'morning'} ${flight?.type || 'direct'}
+Stay: ${hotelArea?.area || 'central area'}
 
-Tone:
-- Confident and decisive (not wishy-washy)
-- Simple language (avoid jargon)
-- Human and friendly (not robotic)
-- Each bullet should be ONE sentence, max 15 words
+Format rules:
+- Each reason = ONE benefit in 10-15 words
+- Start with the practical advantage (no fluff)
+- Focus on time, convenience, location, or experience quality
+- Be specific to THIS trip's details
 
-Focus on:
-- Why the duration is perfect
-- Why the pace/style suits the traveler type
-- Practical benefits (connectivity, convenience, experience)
+Good: "${parsed.numberOfDays} days covers key sights with time to relax"
+Bad: "This trip offers a balanced pace for exploration"
 
-IMPORTANT: Respond with ONLY valid JSON. No markdown, no code blocks, no explanation.
+Good: "${hotelArea?.area || 'Central location'} puts you within walking distance of main attractions"
+Bad: "The hotel area is convenient for tourists"
 
-Use this exact JSON structure:
+Respond with ONLY valid JSON:
 {
   "reasons": [
-    "5 days gives you time to explore without rushing",
-    "Direct morning flights mean you arrive fresh and ready"
+    "Specific concrete benefit 1",
+    "Specific concrete benefit 2"
   ]
 }`;
 
@@ -164,7 +171,7 @@ Use this exact JSON structure:
       messages: [
         {
           role: 'system',
-          content: 'You are a travel advisor. Always respond with valid JSON only. Be confident and simple. Never use markdown or code blocks.'
+          content: 'You explain travel plans concisely. Output JSON only. Focus on concrete benefits, not generic travel advice. 10-15 words per reason.'
         },
         {
           role: 'user',
@@ -242,26 +249,26 @@ async function refineItineraryWithAI({ tripPlan, refinementType }) {
     let refinementPrompt = '';
     
     if (refinementType === 'budget') {
-      refinementPrompt = `Make this itinerary more budget-friendly:
-- Replace expensive activities with affordable alternatives
-- Suggest budget dining options instead of fine dining
-- Focus on free or low-cost attractions
-- Keep the same structure and number of days
-- Maintain the destination: ${parsed.destinationCity}`;
+      refinementPrompt = `Make this budget-friendly. Replace with free/affordable options:
+- Swap paid attractions with free parks, markets, walking tours
+- Change restaurants to street food, local cafes, affordable spots
+- Keep the time block structure (Morning/Afternoon/Evening)
+- Be specific: mention actual free attractions or cheap eats
+- ${parsed.numberOfDays} days, ${parsed.destinationCity}`;
     } else if (refinementType === 'relaxed') {
-      refinementPrompt = `Make this itinerary more relaxed and less rushed:
-- Reduce number of activities per day
-- Add more leisure time and breaks
-- Replace intense activities with calm experiences
-- Keep the same structure and number of days
-- Maintain the destination: ${parsed.destinationCity}`;
+      refinementPrompt = `Make this more relaxed. Cut activities, add breathing room:
+- Reduce to 1-2 activities per time block (not 3+)
+- Add rest time, cafe stops, slow exploration
+- Replace intense activities with calm ones (museums → parks, tours → walks)
+- Keep time block structure but with less packed content
+- ${parsed.numberOfDays} days, ${parsed.destinationCity}`;
     } else if (refinementType === 'add-day') {
-      refinementPrompt = `Add one extra day to this itinerary:
-- Current trip is ${parsed.numberOfDays} days
-- Add a new day BEFORE the last day (which is departure)
-- The new day should have meaningful activities
-- Update the last day number to ${parsed.numberOfDays + 1}
-- Maintain the destination: ${parsed.destinationCity}`;
+      refinementPrompt = `Add one extra day. Insert it BEFORE the last day:
+- Current: ${parsed.numberOfDays} days → New: ${parsed.numberOfDays + 1} days
+- New day should have 1 major sight + local exploration
+- Keep time block structure: Morning/Afternoon/Evening
+- Last day stays as departure day
+- ${parsed.destinationCity}`;
     } else {
       console.warn('[AI Service] Unknown refinement type:', refinementType);
       return null;
@@ -269,27 +276,27 @@ async function refineItineraryWithAI({ tripPlan, refinementType }) {
 
     const currentItinerary = JSON.stringify(itinerary.plan, null, 2);
 
-    const prompt = `You are a travel planning assistant. Refine the following itinerary based on the user's request.
+    const prompt = `Refine this itinerary:
 
-Current Itinerary:
+Current:
 ${currentItinerary}
 
-Refinement Request:
+Change:
 ${refinementPrompt}
 
-IMPORTANT Rules:
-- Do NOT change the destination city (${parsed.destinationCity})
-- Keep the exact same JSON structure
-- Every day must have: day (number), title (string), plan (string)
-- Respond with ONLY valid JSON. No markdown, no code blocks, no explanation.
+Rules:
+- Keep destination: ${parsed.destinationCity}
+- Maintain time block format in "plan": "Morning: ... Afternoon: ... Evening: ..."
+- Keep same day count unless adding a day
+- Be specific with place names and activities
+- JSON only, no markdown
 
-Use this exact JSON structure:
 {
   "itinerary": [
     {
       "day": 1,
-      "title": "Short title",
-      "plan": "Description of activities"
+      "title": "Brief day theme",
+      "plan": "Morning: [activity]. Afternoon: [activity], [food]. Evening: [activity]."
     }
   ]
 }`;
@@ -299,7 +306,7 @@ Use this exact JSON structure:
       messages: [
         {
           role: 'system',
-          content: 'You are a travel planning assistant. Always respond with valid JSON only. Never change the destination city. Never use markdown or code blocks.'
+          content: 'You refine travel itineraries. Keep destination unchanged. Maintain time-block structure. Output JSON only. Be specific with places and activities.'
         },
         {
           role: 'user',
@@ -376,21 +383,23 @@ async function getFlightRecommendation(tripData) {
       return null;
     }
 
-    const prompt = `Provide a brief, practical flight recommendation for a trip ${sourceCity ? `from ${sourceCity} ` : ''}to ${destinationCity} for ${numberOfDays} days.
+    const prompt = `Flight advice for ${sourceCity ? sourceCity + ' → ' : ''}${destinationCity}, ${numberOfDays} days.
 
-Provide ONE sentence with:
-- Best time of day to fly (morning/afternoon/evening)
-- Flight type preference (direct/connecting)
-- Any practical tip
+Give 3 elements in one sentence:
+1. Best time to fly (morning/afternoon/evening) + reason
+2. Direct or connecting + why
+3. Practical tip (booking window, price, or logistics)
 
-Example: "Book direct morning flights for best prices and energy upon arrival."
+Format: "[Time] [type] flights work best because [reason]. [Tip]."
 
-Respond with ONLY the recommendation text, no JSON, no extra formatting.`;
+Example: "Morning direct flights let you start exploring same-day. Book 6-8 weeks out for lowest fares."
+
+Be route-specific. One sentence only, plain text.`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4.1-nano',
       messages: [
-        { role: 'system', content: 'You are a practical travel advisor. Provide brief, actionable recommendations.' },
+        { role: 'system', content: 'You give flight advice. One sentence. Be specific to the route. Include timing, type, and booking tip.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.5,
@@ -424,31 +433,32 @@ async function getHotelRecommendations(tripData) {
                        budget === 'mid-range' ? 'good 3-4 star mid-range hotels' : 
                        budget === 'budget' ? 'budget-friendly hotels' : 'popular hotels';
     
-    const prompt = `Recommend 3-4 real ${budgetNote} in ${destinationCity} for a ${numberOfDays}-day ${travelType || 'leisure'} trip.
+    const prompt = `List 3-4 hotels in ${destinationCity} for ${numberOfDays} days, ${travelType || 'travel'}, ${budgetNote}.
 
-For each hotel, provide:
-1. Actual hotel name (real hotel in this city)
-2. Neighborhood/area
-3. Type (Business/Luxury/Boutique/Contemporary/Heritage/etc.)
+Each hotel needs:
+- name: Real hotel (use actual names if known)
+- area: Exact neighborhood
+- type: One-word style (Boutique/Luxury/Contemporary/Heritage/Business)
+- highlight: Specific feature ("10min walk to [landmark]", "rooftop bar", "near [area] markets")
 
-Format your response as JSON with no code blocks or extra text:
+Be concrete. Mention real neighborhoods and nearby attractions.
+
+JSON only:
 {
   "hotels": [
     {
-      "name": "Hotel Name",
-      "area": "Neighborhood",
-      "type": "Hotel type",
-      "highlight": "One key feature (e.g., 'rooftop bar', 'city views', 'walkable location')"
+      "name": "Real Hotel Name",
+      "area": "Neighborhood Name",
+      "type": "Category",
+      "highlight": "Specific nearby feature or benefit"
     }
   ]
-}
-
-Respond with ONLY valid JSON, no markdown.`;
+}`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4.1-nano',
       messages: [
-        { role: 'system', content: 'You are a travel expert. Recommend real hotels that actually exist. Always respond with valid JSON only.' },
+        { role: 'system', content: 'You recommend hotels. Use real hotel names and neighborhoods. Be specific with highlights (nearby landmarks, features). JSON only.' },
         { role: 'user', content: prompt }
       ],
       response_format: { type: 'json_object' },
@@ -502,20 +512,22 @@ async function getHotelRecommendation(tripData) {
     const typeNote = travelType === 'family' ? ' with family-friendly amenities' : 
                      travelType === 'couple' ? ' with romantic atmosphere' : '';
 
-    const prompt = `Recommend the best area to stay in ${destinationCity} for a ${numberOfDays}-day ${travelType || 'leisure'} trip${budgetNote}.
+    const prompt = `Where to stay in ${destinationCity} for ${numberOfDays} days, ${travelType || 'travel'}${budgetNote}?
 
-Provide ONE sentence with:
-- Best neighborhood/area to stay
-- Why it's convenient (proximity to attractions, transport, etc.)
+One sentence with:
+- Specific neighborhood name
+- 2 concrete reasons ("near [landmark]", "metro access", "food scene", "walkable to [area]")
 
-Example: "Stay in the Old Quarter for walkable access to major sites and authentic restaurants."
+Format: "Stay in [Neighborhood] for [reason 1] and [reason 2]."
 
-Respond with ONLY the recommendation text, no JSON, no extra formatting.`;
+Example: "Stay in Trastevere for authentic trattorias and 15-minute walks to major sites."
+
+Be specific to this city. Plain text, one sentence.`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4.1-nano',
       messages: [
-        { role: 'system', content: 'You are a practical travel advisor. Provide brief, actionable recommendations.' },
+        { role: 'system', content: 'You recommend where to stay. One sentence. Name specific neighborhood and 2 concrete reasons.' },
         { role: 'user', content: prompt }
       ],
       temperature: 0.5,
@@ -531,4 +543,112 @@ Respond with ONLY the recommendation text, no JSON, no extra formatting.`;
   }
 }
 
-export { generateAIItinerary, explainTripPlanWithAI, refineItineraryWithAI, getFlightRecommendation, getHotelRecommendation, getHotelRecommendations };
+/**
+ * Get restaurant recommendations based on location and preferences.
+ * @param {Object} params - Search parameters
+ * @returns {Promise<Object|null>} Restaurant recommendations or null
+ */
+async function getRestaurantRecommendations({ city, area, radiusKm, preferences = {} }) {
+  try {
+    if (!city) {
+      console.warn('[AI Service] City required for restaurant recommendations');
+      return null;
+    }
+
+    const { dietType, cuisineType, timeOfDay, budget } = preferences;
+
+    const dietNote = dietType === 'veg' ? 'vegetarian-friendly' : 
+                     dietType === 'non-veg' ? 'non-vegetarian' : 'any';
+    const cuisineNote = cuisineType && cuisineType !== 'all' ? `, ${cuisineType} cuisine` : '';
+    const timeNote = timeOfDay && timeOfDay !== 'all' ? ` best for ${timeOfDay}` : '';
+    const budgetNote = budget && budget !== 'all' ? ` in ${budget} range` : '';
+    const locationNote = area ? ` in ${area}` : '';
+    const radiusNote = radiusKm ? ` within ${radiusKm}km` : '';
+
+    const prompt = `Find 6-8 iconic local restaurants in ${city}${locationNote}${radiusNote}.
+
+Filters: ${dietNote}${cuisineNote}${timeNote}${budgetNote}
+
+For each restaurant:
+- name: Actual restaurant name (real, well-known spots)
+- distanceKm: Estimated distance from ${area || 'city center'} (number only, e.g., 2.5)
+- famousFor: One sentence why locals love it (specific reason, not generic)
+- mustTry: Array of 1-3 specific dish names (not categories like "pasta" but "Cacio e Pepe")
+- bestTime: Best time to visit (e.g., "Lunch", "Dinner", "Breakfast", "Evening snacks")
+- category: One word (Street Food/Fine Dining/Casual/Cafe/Bar/Traditional)
+- budget: ₹ or ₹₹ or ₹₹₹
+
+Focus on:
+- Places famous for specific dishes
+- Local favorites, not tourist traps
+- Real restaurant names
+- Concrete dish names
+
+JSON only:
+{
+  "city": "${city}",
+  "area": "${area || 'city center'}",
+  "restaurants": [
+    {
+      "name": "Restaurant Name",
+      "distanceKm": 2.5,
+      "famousFor": "Specific reason locals go here",
+      "mustTry": ["Specific Dish 1", "Specific Dish 2"],
+      "bestTime": "Lunch",
+      "category": "Street Food",
+      "budget": "₹"
+    }
+  ]
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-nano',
+      messages: [
+        { 
+          role: 'system', 
+          content: 'You recommend local restaurants. Use real names and specific dishes. Focus on iconic local food. JSON only.' 
+        },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.6,
+      max_tokens: 800,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      console.warn('[AI Service] No content for restaurant recommendations');
+      return null;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      console.warn('[AI Service] Failed to parse restaurant recommendations');
+      return null;
+    }
+
+    // Validate structure
+    if (!parsed.restaurants || !Array.isArray(parsed.restaurants)) {
+      console.warn('[AI Service] Invalid restaurant structure');
+      return null;
+    }
+
+    return parsed;
+
+  } catch (error) {
+    console.warn('[AI Service] Error getting restaurant recommendations:', error.message);
+    return null;
+  }
+}
+
+export { 
+  generateAIItinerary, 
+  explainTripPlanWithAI, 
+  refineItineraryWithAI, 
+  getFlightRecommendation, 
+  getHotelRecommendation, 
+  getHotelRecommendations,
+  getRestaurantRecommendations
+};

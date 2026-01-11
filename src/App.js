@@ -8,6 +8,9 @@ import HomePage from './pages/HomePage';
 import ExplorePage from './pages/ExplorePage';
 import MyTripsPage from './pages/MyTripsPage';
 import TripPlanPage from './pages/TripPlanPage';
+import FoodPage from './pages/FoodPage';
+import MoodGuidePage from './pages/MoodGuidePage';
+import RoadSensePage from './pages/RoadSensePage';
 import { createTripPlan } from './utils/tripPlanner';
 
 
@@ -25,6 +28,18 @@ function App() {
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
   const [language, setLanguage] = useState(() => localStorage.getItem('appLanguage') || 'english');
   const messagesContainerRef = useRef(null);
+  
+  // Assistant conversation state for building trip info
+  const [assistantContext, setAssistantContext] = useState({
+    step: 'destination', // destination, source, days, budget, tripType
+    collectedInfo: {
+      destination: '',
+      source: '',
+      days: '',
+      budget: 'mid-range',
+      tripType: 'solo'
+    }
+  });
 
   // Global body styles
   React.useEffect(() => {
@@ -71,28 +86,132 @@ function App() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setLoading(true);
+    setBotTyping(true);
 
     let botMsg;
+    const typingDelay = 400 + Math.floor(Math.random() * 301);
 
-    // Check if a plan exists - assistant only works with existing plans
-    if (!lastPlan) {
-      botMsg = { 
-        id: Date.now() + 1, 
-        sender: 'bot', 
-        text: 'I can help refine your travel plan, but I need an existing plan first. Please go to Home and create a trip plan by selecting an idea or talking to me there.' 
-      };
-    } else {
-      // Plan exists - assistant is in refinement mode
-      // For now, acknowledge the request (actual refinement happens via quick action buttons)
-      botMsg = { 
-        id: Date.now() + 1, 
-        sender: 'bot', 
-        text: 'I can help explain your current plan or refine it. Use the quick action buttons (Budget Friendly, More Relaxed, Add 1 Day) to modify your itinerary, or ask me any questions about your trip.' 
+    try {
+      // If no plan exists, gather info step by step
+      if (!lastPlan) {
+        const { createTripPlan } = await import('./utils/tripPlanner');
+        
+        // Check if this is a greeting
+        const greetings = ['hi', 'hello', 'hey', 'hola', 'namaste', 'howdy'];
+        const isGreeting = greetings.some(g => trimmed.toLowerCase().includes(g));
+        
+        // If it's a greeting, acknowledge and ask for destination
+        if (isGreeting && assistantContext.step === 'destination') {
+          botMsg = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: 'Hello! I\'d love to help you plan your trip. Where would you like to travel to? (Destination city)'
+          };
+        } else {
+          // Process as trip data
+          let updatedContext = { ...assistantContext };
+          let questionToAsk = null;
+          let readyToCreatePlan = false;
+
+          // Step 1: Get destination
+          if (assistantContext.step === 'destination') {
+            updatedContext.collectedInfo.destination = trimmed;
+            updatedContext.step = 'source';
+            questionToAsk = 'Where are you traveling from? (Source city)';
+          }
+          // Step 2: Get source
+          else if (assistantContext.step === 'source') {
+            updatedContext.collectedInfo.source = trimmed;
+            updatedContext.step = 'days';
+            questionToAsk = 'How many days do you want to travel for?';
+          }
+          // Step 3: Get number of days
+          else if (assistantContext.step === 'days') {
+            updatedContext.collectedInfo.days = trimmed;
+            updatedContext.step = 'completed';
+            readyToCreatePlan = true;
+          }
+
+          // Update context state
+          setAssistantContext(updatedContext);
+
+          if (readyToCreatePlan) {
+            // All info collected - create the plan
+            const fullInput = `${updatedContext.collectedInfo.days} days from ${updatedContext.collectedInfo.source} to ${updatedContext.collectedInfo.destination}`;
+            const result = createTripPlan(fullInput, language);
+            
+            if (result.plan) {
+              const { parsed } = result.plan;
+              setLastPlan(result.plan);
+              setTripContext({
+                from: parsed?.sourceCity || updatedContext.collectedInfo.source,
+                to: parsed?.destinationCity || updatedContext.collectedInfo.destination,
+                days: parsed?.numberOfDays || updatedContext.collectedInfo.days,
+                pace: parsed?.travelType || 'Leisure'
+              });
+              
+              botMsg = {
+                id: Date.now() + 1,
+                sender: 'bot',
+                text: `Perfect! I've created a trip plan for you:\n\n📍 From: ${parsed?.sourceCity || updatedContext.collectedInfo.source}\n📍 To: ${parsed?.destinationCity || updatedContext.collectedInfo.destination}\n📅 Days: ${parsed?.numberOfDays || updatedContext.collectedInfo.days}\n🎯 Type: ${parsed?.travelType || 'Leisure'}\n\nNavigating you to the trip plan page...`
+              };
+            } else {
+              botMsg = {
+                id: Date.now() + 1,
+                sender: 'bot',
+                text: `Great! I've noted your trip: ${updatedContext.collectedInfo.days} days from ${updatedContext.collectedInfo.source} to ${updatedContext.collectedInfo.destination}. Let me create your itinerary...`
+              };
+            }
+          } else {
+            // Ask the next question
+            botMsg = {
+              id: Date.now() + 1,
+              sender: 'bot',
+              text: questionToAsk
+            };
+          }
+        }
+      } else {
+        // Plan exists - provide contextual responses about the current plan
+        const { explainTripPlanWithAI } = await import('./services/aiService');
+        const explanations = await explainTripPlanWithAI(lastPlan);
+        
+        // Provide relevant response based on user query
+        if (trimmed.toLowerCase().includes('budget') || trimmed.toLowerCase().includes('price') || trimmed.toLowerCase().includes('cost')) {
+          botMsg = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: `For your ${tripContext?.days}-day trip to ${tripContext?.to}:\n\n${explanations?.[0] || 'Budget information would be calculated based on your selected accommodations and activities.'}`
+          };
+        } else if (trimmed.toLowerCase().includes('what') || trimmed.toLowerCase().includes('activity') || trimmed.toLowerCase().includes('do')) {
+          botMsg = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: `Here's what you can do in ${tripContext?.to}:\n\n${explanations?.[1] || 'Check your itinerary for day-by-day activities.'}`
+          };
+        } else if (trimmed.toLowerCase().includes('food') || trimmed.toLowerCase().includes('eat') || trimmed.toLowerCase().includes('restaurant')) {
+          botMsg = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: `${tripContext?.to} has amazing food! Check the Food & Restaurants page for local recommendations near your destination.`
+          };
+        } else {
+          botMsg = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: `Regarding your trip to ${tripContext?.to} (${tripContext?.days} days):\n\n${explanations?.[0] || 'I can help explain your itinerary, suggest activities, or answer questions about your trip. What would you like to know?'}`
+          };
+        }
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+      botMsg = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: 'Sorry, I encountered an error processing your request. Please try again.'
       };
     }
 
-    const typingDelay = 400 + Math.floor(Math.random() * 301);
-    setBotTyping(true);
     await new Promise(res => setTimeout(res, typingDelay));
     setMessages(prev => [...prev, botMsg]);
     setBotTyping(false);
@@ -164,6 +283,18 @@ function App() {
             <Route 
               path="/explore" 
               element={<ExplorePage isDesktop={isDesktop} />} 
+            />
+            <Route 
+              path="/food" 
+              element={<FoodPage isDesktop={isDesktop} />} 
+            />
+            <Route 
+              path="/mood-guide" 
+              element={<MoodGuidePage isDesktop={isDesktop} tripContext={tripContext} />} 
+            />
+            <Route 
+              path="/road-sense" 
+              element={<RoadSensePage isDesktop={isDesktop} />} 
             />
             <Route 
               path="/my-trips" 

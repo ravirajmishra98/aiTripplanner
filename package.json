@@ -19,6 +19,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
+    "cache:images": "node scripts/cacheImages.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build"
   },
@@ -41,6 +42,7 @@
     ]
   },
   "devDependencies": {
+    "dotenv": "^16.6.1",
     "gh-pages": "^6.3.0"
   }
 }

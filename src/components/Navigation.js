@@ -96,7 +96,7 @@ function Navigation({ isDesktop }) {
               }
             }}
           >
-            🏠 Home
+            Home
           </Link>
           
           <Link 
@@ -115,9 +115,47 @@ function Navigation({ isDesktop }) {
               }
             }}
           >
-            🌍 Explore
+            Explore
           </Link>
           
+          <Link 
+            to="/food" 
+            style={navLinkStyle('/food')}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/food') {
+                e.target.style.color = '#0f172a';
+                e.target.style.borderBottomColor = '#cbd5e1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/food') {
+                e.target.style.color = '#64748b';
+                e.target.style.borderBottomColor = 'transparent';
+              }
+            }}
+          >
+            Food
+          </Link>
+          
+          <Link 
+            to="/mood-guide" 
+            style={navLinkStyle('/mood-guide')}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/mood-guide') {
+                e.target.style.color = '#0f172a';
+                e.target.style.borderBottomColor = '#cbd5e1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/mood-guide') {
+                e.target.style.color = '#64748b';
+                e.target.style.borderBottomColor = 'transparent';
+              }
+            }}
+          >
+            Mood Guide
+          </Link>
+
           <Link 
             to="/my-trips" 
             style={navLinkStyle('/my-trips')}
@@ -134,7 +172,26 @@ function Navigation({ isDesktop }) {
               }
             }}
           >
-            🗺️ My Trips
+            My Trips
+          </Link>
+
+          <Link 
+            to="/road-sense" 
+            style={navLinkStyle('/road-sense')}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/road-sense') {
+                e.target.style.color = '#0f172a';
+                e.target.style.borderBottomColor = '#cbd5e1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/road-sense') {
+                e.target.style.color = '#64748b';
+                e.target.style.borderBottomColor = 'transparent';
+              }
+            }}
+          >
+            Road Sense
           </Link>
         </div>
       </nav>
@@ -259,6 +316,44 @@ function Navigation({ isDesktop }) {
           </Link>
           
           <Link 
+            to="/food" 
+            style={mobileNavLinkStyle('/food')}
+            onClick={() => setMobileMenuOpen(false)}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/food') {
+                e.currentTarget.style.background = '#f1f5f9';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/food') {
+                e.currentTarget.style.background = 'transparent';
+              }
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🍽️</span>
+            <span>Food</span>
+          </Link>
+
+          <Link 
+            to="/mood-guide" 
+            style={mobileNavLinkStyle('/mood-guide')}
+            onClick={() => setMobileMenuOpen(false)}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/mood-guide') {
+                e.currentTarget.style.background = '#f1f5f9';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/mood-guide') {
+                e.currentTarget.style.background = 'transparent';
+              }
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🧭</span>
+            <span>Mood Guide</span>
+          </Link>
+          
+          <Link 
             to="/my-trips" 
             style={mobileNavLinkStyle('/my-trips')}
             onClick={() => setMobileMenuOpen(false)}
@@ -275,6 +370,25 @@ function Navigation({ isDesktop }) {
           >
             <span style={{ fontSize: 20 }}>🗺️</span>
             <span>My Trips</span>
+          </Link>
+
+          <Link 
+            to="/road-sense" 
+            style={mobileNavLinkStyle('/road-sense')}
+            onClick={() => setMobileMenuOpen(false)}
+            onMouseEnter={(e) => {
+              if (location.pathname !== '/road-sense') {
+                e.currentTarget.style.background = '#f1f5f9';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (location.pathname !== '/road-sense') {
+                e.currentTarget.style.background = 'transparent';
+              }
+            }}
+          >
+            <span style={{ fontSize: 20 }}>🛣️</span>
+            <span>Road Sense</span>
           </Link>
         </div>
       </div>

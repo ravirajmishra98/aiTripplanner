@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createTripPlan } from '../utils/tripPlanner';
+import { getImageUrl } from '../services/imageService';
 
 function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext, setMessages, setShowAssistant, language, setLanguage }) {
   const navigate = useNavigate();
@@ -13,8 +14,24 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
   const [formDays, setFormDays] = useState('');
   const [formBudget, setFormBudget] = useState('mid-range');
   const [formTripType, setFormTripType] = useState('solo');
+  const [heroUrl, setHeroUrl] = useState(null);
 
   const canSubmitForm = formDestinationCity.trim() && parseInt(formDays) > 0;
+
+  // Home hero city image (random city on mount only, doesn't change until page reload)
+  useEffect(() => {
+    let active = true;
+    const randomCities = ['Goa', 'Kerala', 'Jaipur', 'Manali', 'Udaipur', 'Rishikesh', 'Shimla', 'Ooty', 'Coorg', 'Varanasi'];
+    const randomCity = randomCities[Math.floor(Math.random() * randomCities.length)];
+    const params = {
+      category: 'destination',
+      cityName: randomCity
+    };
+    getImageUrl(params).then((url) => {
+      if (active) setHeroUrl(url);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -169,22 +186,41 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
         flexDirection: 'column',
         alignItems: 'center'
       }}>
-        {/* Primary Planning Form */}
-        <form onSubmit={handleFormSubmit} style={{
+        {/* Hero background wrapper with city image */}
+        <div style={{
           width: '100%',
           marginBottom: 48,
-          background: '#e0e7f1',
-          border: 'none',
-          boxShadow: 'none',
-          borderRadius: 12,
-          padding: isDesktop ? '32px 28px' : '24px 20px',
-          overflow: 'hidden'
+          position: 'relative',
+          borderRadius: 16,
+          overflow: 'hidden',
+          minHeight: isDesktop ? '300px' : '280px',
+          backgroundImage: heroUrl ? `url(${heroUrl})` : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'center',
+          padding: isDesktop ? '24px' : '16px'
         }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.5))', zIndex: 1 }} />
+          {/* Primary Planning Form over the background */}
+          <form onSubmit={handleFormSubmit} style={{
+            width: '100%',
+            background: 'rgba(224, 231, 241, 0.92)',
+            border: 'none',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+            borderRadius: 12,
+            padding: isDesktop ? '24px 28px' : '18px 16px',
+            overflow: 'visible',
+            position: 'relative',
+            zIndex: 2
+          }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isDesktop ? '2fr 2fr 1fr' : '1fr',
+            gridTemplateColumns: isDesktop ? 'repeat(5, 1fr)' : '1fr',
             gap: isDesktop ? 12 : 10,
-            alignItems: 'center'
+            alignItems: 'flex-end',
+            width: '100%'
           }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ color: '#475569', fontSize: 12, fontWeight: 600 }}>Source city</label>
@@ -283,6 +319,11 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
                 <option value="couple">Couple</option>
                 <option value="family">Family</option>
                 <option value="friends">Friends</option>
+                <option value="honeymoon">Honeymoon</option>
+                <option value="adventure">Adventure</option>
+                <option value="wellness">Wellness/Retreat</option>
+                <option value="business">Business</option>
+                <option value="group">Large Group</option>
               </select>
             </div>
             {/* Right column: Button */}
@@ -324,6 +365,7 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
             </div>
           </div>
         </form>
+        </div>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <h1 style={{

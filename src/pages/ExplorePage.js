@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '../services/imageService';
 
 function ExplorePage({ isDesktop }) {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('all');
   const [hoveredDestId, setHoveredDestId] = useState(null);
   const [selectedIntents, setSelectedIntents] = useState([]);
+  const [destImages, setDestImages] = useState({});
+  const [heroUrl, setHeroUrl] = useState(null);
+
+  // Random city hero image on mount
+  useEffect(() => {
+    const randomCities = ['Goa', 'Kerala', 'Jaipur', 'Manali', 'Udaipur', 'Rishikesh', 'Shimla', 'Ooty', 'Coorg', 'Varanasi'];
+    const randomCity = randomCities[Math.floor(Math.random() * randomCities.length)];
+    getImageUrl({ category: 'destination', cityName: randomCity }).then(url => setHeroUrl(url)).catch(() => {});
+  }, []);
 
   const intents = [
     { id: 'weekend', label: '3-day weekend', emoji: '📅', color: '#06b6d4' },
@@ -54,6 +64,19 @@ function ExplorePage({ isDesktop }) {
     return destinations.filter(dest => dest.category === activeCategory);
   };
 
+  // Prefetch images for all destinations (cached in service)
+  useEffect(() => {
+    const loadImages = async () => {
+      const entries = await Promise.all(destinations.map(async (dest) => {
+        const url = await getImageUrl({ cityName: dest.name, countryName: dest.country, category: 'destination' });
+        return [dest.id, url];
+      }));
+      const map = entries.reduce((acc, [id, url]) => ({ ...acc, [id]: url }), {});
+      setDestImages(map);
+    };
+    loadImages();
+  }, []);
+
   const handleDestinationClick = (dest) => {
     navigate('/plan', {
       state: {
@@ -71,9 +94,8 @@ function ExplorePage({ isDesktop }) {
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      padding: isDesktop ? '40px 48px' : '24px 20px',
-      overflowY: 'auto',
-      gap: 32
+      overflow: 'hidden',
+      gap: 0
     }}>
       <style>{`
         @keyframes slideUp {
@@ -92,17 +114,31 @@ function ExplorePage({ isDesktop }) {
           outline-offset: 2px;
         }
       `}</style>
+
+      {/* Scrollable wrapper */}
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Hero background */}
+      <div style={{
+        position: 'relative',
+        backgroundImage: heroUrl ? `url(${heroUrl})` : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        minHeight: '240px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.5))', zIndex: 1 }} />
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', color: '#fff' }}>
+          <h1 style={{ fontSize: isDesktop ? 42 : 32, fontWeight: 800, marginBottom: 12, letterSpacing: '-1px' }}>Explore Destinations</h1>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: isDesktop ? '40px 48px' : '24px 20px', flex: 1, gap: 32, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <h1 style={{ 
-          color: 'var(--text)', 
-          fontSize: isDesktop ? 42 : 32, 
-          fontWeight: 800, 
-          marginBottom: 12,
-          letterSpacing: '-1px'
-        }}>
-          Explore Destinations
-        </h1>
         <p style={{ 
           color: '#64748b', 
           fontSize: isDesktop ? 15 : 14, 
@@ -253,7 +289,7 @@ function ExplorePage({ isDesktop }) {
             onMouseEnter={() => setHoveredDestId(dest.id)}
             onMouseLeave={() => setHoveredDestId(null)}
             style={{
-              padding: isDesktop ? '24px 20px' : '20px 16px',
+              padding: 0,
               borderRadius: 12,
               background: '#ffffff',
               border: `1px solid ${hoveredDestId === dest.id ? '#cbd5e1' : '#e2e8f0'}`,
@@ -268,11 +304,38 @@ function ExplorePage({ isDesktop }) {
               gap: 10,
               transform: hoveredDestId === dest.id ? 'translateY(-2px)' : 'translateY(0)',
               outline: 'none',
-              position: 'relative'
+              position: 'relative',
+              overflow: 'hidden'
             }}
           >
-            <div style={{ fontSize: isDesktop ? 40 : 36 }}>{dest.emoji}</div>
-            <div>
+            <div style={{
+              width: '100%',
+              height: 140,
+              background: destImages[dest.id]
+                ? `linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.35) 100%), url(${destImages[dest.id]}) center/cover`
+                : 'linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 100%)',
+              position: 'relative'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: 10,
+                left: 10,
+                background: 'rgba(255,255,255,0.92)',
+                color: '#0f172a',
+                padding: '6px 10px',
+                borderRadius: 8,
+                fontWeight: 700,
+                fontSize: 12,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}>
+                <span style={{ fontSize: 16 }}>{dest.emoji}</span>
+                <span>{dest.category.toUpperCase()}</span>
+              </div>
+            </div>
+
+            <div style={{ padding: isDesktop ? '18px 16px' : '16px 14px', width: '100%' }}>
               <div style={{ 
                 fontSize: isDesktop ? 16 : 15, 
                 fontWeight: 700, 
@@ -314,6 +377,8 @@ function ExplorePage({ isDesktop }) {
           </div>
         );
         })}
+        </div>
+      </div>
       </div>
     </div>
   );

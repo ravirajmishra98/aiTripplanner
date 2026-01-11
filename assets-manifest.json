@@ -1,0 +1,9 @@
+{
+  "items": [
+    { "category": "food", "name": "Vada Pav", "slug": "vada-pav", "out": "public/assets/food/vada-pav.jpg" },
+    { "category": "food", "name": "Pani Puri", "slug": "pani-puri", "out": "public/assets/food/pani-puri.jpg" },
+    { "category": "food", "name": "Kolhapuri Chicken", "slug": "kolhapuri-chicken", "out": "public/assets/food/kolhapuri-chicken.jpg" },
+    { "category": "food", "name": "Khandeshi Mutton Curry", "slug": "khandeshi-mutton-curry", "out": "public/assets/food/khandeshi-mutton-curry.jpg" },
+    { "category": "food", "name": "Malvani Fish Thali", "slug": "malvani-fish-thali", "out": "public/assets/food/malvani-fish-thali.jpg" }
+  ]
+}

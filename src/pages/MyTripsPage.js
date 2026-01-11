@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getImageUrl } from '../services/imageService';
 
 function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
   const navigate = useNavigate();
   const [savedTrips, setSavedTrips] = useState([]);
+  const [heroUrl, setHeroUrl] = useState(null);
+
+  // Random city hero image on mount
+  useEffect(() => {
+    const randomCities = ['Goa', 'Kerala', 'Jaipur', 'Manali', 'Udaipur', 'Rishikesh', 'Shimla', 'Ooty', 'Coorg', 'Varanasi'];
+    const randomCity = randomCities[Math.floor(Math.random() * randomCities.length)];
+    getImageUrl({ category: 'destination', cityName: randomCity }).then(url => setHeroUrl(url)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Load saved trips from localStorage
@@ -33,24 +42,41 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: isDesktop ? '60px 40px' : '40px 20px',
-        overflowY: 'auto'
+        overflow: 'hidden',
+        gap: 0
       }}>
+        {/* Scrollable wrapper */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {/* Hero background */}
+        <div style={{
+          position: 'relative',
+          backgroundImage: heroUrl ? `url(${heroUrl})` : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          minHeight: '240px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0
+        }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.5))', zIndex: 1 }} />
+          <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', color: '#fff' }}>
+            <h1 style={{ fontSize: isDesktop ? 42 : 32, fontWeight: 800, marginBottom: 0, letterSpacing: '-1px' }}>My Trips</h1>
+          </div>
+        </div>
+        {/* Content */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: isDesktop ? '60px 40px' : '40px 20px'
+        }}>
         <div style={{
           textAlign: 'center',
           maxWidth: '600px'
         }}>
           <div style={{ fontSize: 64, marginBottom: 24 }}>🗺️</div>
-          <h1 style={{ 
-            color: '#0f172a', 
-            fontSize: isDesktop ? 32 : 24, 
-            fontWeight: 700, 
-            marginBottom: 16 
-          }}>
-            My Trips
-          </h1>
           <p style={{ 
             color: '#64748b', 
             fontSize: isDesktop ? 16 : 14, 
@@ -58,6 +84,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
           }}>
             No saved trips yet. Create a trip plan and save it to see it here!
           </p>
+        </div>
+        </div>
         </div>
       </div>
     );
@@ -68,8 +96,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      padding: isDesktop ? '40px 40px' : '24px 20px',
-      overflowY: 'auto',
+      overflow: 'hidden',
+      gap: 0,
       animation: 'fadeIn 0.4s ease-in-out'
     }}>
       <style>{`
@@ -79,17 +107,30 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
         }
       `}</style>
       
+      {/* Scrollable wrapper */}
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Hero background */}
+      <div style={{
+        position: 'relative',
+        backgroundImage: heroUrl ? `url(${heroUrl})` : 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        minHeight: '240px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
+      }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.5))', zIndex: 1 }} />
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', color: '#fff' }}>
+          <h1 style={{ fontSize: isDesktop ? 42 : 32, fontWeight: 800, marginBottom: 0, letterSpacing: '-1px' }}>My Trips</h1>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{ padding: isDesktop ? '40px 40px' : '24px 20px', flex: 1 }}>
       {/* Header */}
       <div style={{ marginBottom: 40 }}>
-        <h1 style={{
-          color: '#0f172a',
-          fontSize: isDesktop ? 42 : 32,
-          fontWeight: 800,
-          marginBottom: 8,
-          letterSpacing: '-1px'
-        }}>
-          My Trips
-        </h1>
         <p style={{
           color: '#94a3b8',
           fontSize: isDesktop ? 15 : 14
@@ -237,6 +278,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
             </div>
           );
         })}
+      </div>
+      </div>
       </div>
     </div>
   );
