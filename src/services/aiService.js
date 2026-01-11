@@ -362,4 +362,173 @@ Use this exact JSON structure:
   }
 }
 
-export { generateAIItinerary, explainTripPlanWithAI, refineItineraryWithAI };
+/**
+ * Generate flight recommendations based on trip details.
+ * @param {Object} tripData - Trip details
+ * @returns {Promise<string|null>} Flight recommendation or null
+ */
+async function getFlightRecommendation(tripData) {
+  try {
+    const { sourceCity, destinationCity, numberOfDays, travelType } = tripData;
+    
+    if (!destinationCity) {
+      console.warn('[AI Service] Insufficient data for flight recommendation');
+      return null;
+    }
+
+    const prompt = `Provide a brief, practical flight recommendation for a trip ${sourceCity ? `from ${sourceCity} ` : ''}to ${destinationCity} for ${numberOfDays} days.
+
+Provide ONE sentence with:
+- Best time of day to fly (morning/afternoon/evening)
+- Flight type preference (direct/connecting)
+- Any practical tip
+
+Example: "Book direct morning flights for best prices and energy upon arrival."
+
+Respond with ONLY the recommendation text, no JSON, no extra formatting.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-nano',
+      messages: [
+        { role: 'system', content: 'You are a practical travel advisor. Provide brief, actionable recommendations.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+      max_tokens: 100,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    return content?.trim() || null;
+
+  } catch (error) {
+    console.warn('[AI Service] Error getting flight recommendation:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Generate hotel recommendations with actual hotel names.
+ * @param {Object} tripData - Trip details
+ * @returns {Promise<Array<Object>|null>} Array of hotel recommendations or null
+ */
+async function getHotelRecommendations(tripData) {
+  try {
+    const { destinationCity, numberOfDays, travelType, budget } = tripData;
+    
+    if (!destinationCity) {
+      console.warn('[AI Service] Insufficient data for hotel recommendations');
+      return null;
+    }
+
+    const budgetNote = budget === 'luxury' ? '5-star luxury hotels' : 
+                       budget === 'mid-range' ? 'good 3-4 star mid-range hotels' : 
+                       budget === 'budget' ? 'budget-friendly hotels' : 'popular hotels';
+    
+    const prompt = `Recommend 3-4 real ${budgetNote} in ${destinationCity} for a ${numberOfDays}-day ${travelType || 'leisure'} trip.
+
+For each hotel, provide:
+1. Actual hotel name (real hotel in this city)
+2. Neighborhood/area
+3. Type (Business/Luxury/Boutique/Contemporary/Heritage/etc.)
+
+Format your response as JSON with no code blocks or extra text:
+{
+  "hotels": [
+    {
+      "name": "Hotel Name",
+      "area": "Neighborhood",
+      "type": "Hotel type",
+      "highlight": "One key feature (e.g., 'rooftop bar', 'city views', 'walkable location')"
+    }
+  ]
+}
+
+Respond with ONLY valid JSON, no markdown.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-nano',
+      messages: [
+        { role: 'system', content: 'You are a travel expert. Recommend real hotels that actually exist. Always respond with valid JSON only.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.6,
+      max_tokens: 400,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      console.warn('[AI Service] No content for hotel recommendations');
+      return null;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      console.warn('[AI Service] Failed to parse hotel recommendations');
+      return null;
+    }
+
+    // Validate structure
+    if (!parsed.hotels || !Array.isArray(parsed.hotels)) {
+      console.warn('[AI Service] Invalid hotel recommendations structure');
+      return null;
+    }
+
+    return parsed.hotels;
+
+  } catch (error) {
+    console.warn('[AI Service] Error getting hotel recommendations:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Generate hotel recommendations based on trip details.
+ * @param {Object} tripData - Trip details
+ * @returns {Promise<string|null>} Hotel recommendation or null
+ */
+async function getHotelRecommendation(tripData) {
+  try {
+    const { destinationCity, numberOfDays, travelType, budget } = tripData;
+    
+    if (!destinationCity) {
+      console.warn('[AI Service] Insufficient data for hotel recommendation');
+      return null;
+    }
+
+    const budgetNote = budget ? ` (${budget} budget)` : '';
+    const typeNote = travelType === 'family' ? ' with family-friendly amenities' : 
+                     travelType === 'couple' ? ' with romantic atmosphere' : '';
+
+    const prompt = `Recommend the best area to stay in ${destinationCity} for a ${numberOfDays}-day ${travelType || 'leisure'} trip${budgetNote}.
+
+Provide ONE sentence with:
+- Best neighborhood/area to stay
+- Why it's convenient (proximity to attractions, transport, etc.)
+
+Example: "Stay in the Old Quarter for walkable access to major sites and authentic restaurants."
+
+Respond with ONLY the recommendation text, no JSON, no extra formatting.`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-nano',
+      messages: [
+        { role: 'system', content: 'You are a practical travel advisor. Provide brief, actionable recommendations.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.5,
+      max_tokens: 100,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    return content?.trim() || null;
+
+  } catch (error) {
+    console.warn('[AI Service] Error getting hotel recommendation:', error.message);
+    return null;
+  }
+}
+
+export { generateAIItinerary, explainTripPlanWithAI, refineItineraryWithAI, getFlightRecommendation, getHotelRecommendation, getHotelRecommendations };

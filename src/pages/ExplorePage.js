@@ -93,24 +93,24 @@ function ExplorePage({ isDesktop }) {
         }
       `}</style>
       {/* Header */}
-      <div style={{ textAlign: 'center' }}>
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
         <h1 style={{ 
           color: 'var(--text)', 
-          fontSize: isDesktop ? 36 : 28, 
+          fontSize: isDesktop ? 42 : 32, 
           fontWeight: 800, 
           marginBottom: 12,
-          letterSpacing: '-0.8px'
+          letterSpacing: '-1px'
         }}>
           Explore Destinations
         </h1>
         <p style={{ 
-          color: '#334155', 
-          fontSize: isDesktop ? 16 : 15, 
-          lineHeight: 1.5,
+          color: '#64748b', 
+          fontSize: isDesktop ? 15 : 14, 
+          lineHeight: 1.6,
           maxWidth: '560px',
           margin: '0 auto'
         }}>
-          Discover amazing places to visit. Find inspiration for your next adventure.
+          Discover amazing places to visit. Find your next adventure.
         </p>
       </div>
 
@@ -180,40 +180,41 @@ function ExplorePage({ isDesktop }) {
         display: 'flex',
         justifyContent: 'center',
         gap: isDesktop ? 12 : 8,
-        flexWrap: 'wrap'
+        flexWrap: 'wrap',
+        marginBottom: 40
       }}>
         {categories.map(cat => (
           <button
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
             style={{
-              padding: isDesktop ? '12px 24px' : '10px 18px',
-              borderRadius: 10,
+              padding: isDesktop ? '10px 20px' : '8px 16px',
+              borderRadius: 8,
               background: activeCategory === cat.id 
-                ? 'linear-gradient(135deg, #1976d2, #2196f3)' 
-                : 'rgba(255,255,255,0.08)',
+                ? '#0f172a' 
+                : '#ffffff',
               border: activeCategory === cat.id 
-                ? '1px solid rgba(25, 118, 210, 0.5)' 
-                : '1px solid rgba(255,255,255,0.12)',
-              color: activeCategory === cat.id ? '#fff' : '#b8c5d6',
+                ? '1px solid #0f172a' 
+                : '1px solid #e2e8f0',
+              color: activeCategory === cat.id ? '#fff' : '#64748b',
               fontSize: isDesktop ? 14 : 13,
-              fontWeight: activeCategory === cat.id ? 600 : 500,
+              fontWeight: 500,
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.2s ease-out',
               display: 'flex',
               alignItems: 'center',
               gap: 6
             }}
             onMouseEnter={(e) => {
               if (activeCategory !== cat.id) {
-                e.target.style.background = 'rgba(255,255,255,0.12)';
-                e.target.style.borderColor = 'rgba(255,255,255,0.2)';
+                e.target.style.background = '#f8fafc';
+                e.target.style.borderColor = '#cbd5e1';
               }
             }}
             onMouseLeave={(e) => {
               if (activeCategory !== cat.id) {
-                e.target.style.background = 'rgba(255,255,255,0.08)';
-                e.target.style.borderColor = 'rgba(255,255,255,0.12)';
+                e.target.style.background = '#ffffff';
+                e.target.style.borderColor = '#e2e8f0';
               }
             }}
           >
@@ -233,38 +234,9 @@ function ExplorePage({ isDesktop }) {
         width: '100%'
       }}>
         {getFilteredDestinations().map((dest, index) => {
-          const gradients = [
-            'linear-gradient(135deg, rgba(191, 219, 254, 0.75), rgba(219, 234, 254, 0.95))',
-            'linear-gradient(135deg, rgba(254, 205, 211, 0.75), rgba(254, 226, 226, 0.95))',
-            'linear-gradient(135deg, rgba(187, 247, 208, 0.75), rgba(220, 252, 231, 0.95))',
-            'linear-gradient(135deg, rgba(254, 215, 170, 0.75), rgba(254, 243, 199, 0.95))',
-            'linear-gradient(135deg, rgba(221, 214, 254, 0.75), rgba(243, 232, 255, 0.95))',
-            'linear-gradient(135deg, rgba(186, 230, 253, 0.75), rgba(224, 242, 254, 0.95))',
-            'linear-gradient(135deg, rgba(251, 207, 232, 0.75), rgba(252, 231, 243, 0.95))',
-            'linear-gradient(135deg, rgba(217, 249, 157, 0.75), rgba(236, 252, 203, 0.95))',
-            'linear-gradient(135deg, rgba(191, 219, 254, 0.75), rgba(219, 234, 254, 0.95))',
-            'linear-gradient(135deg, rgba(254, 205, 211, 0.75), rgba(254, 226, 226, 0.95))',
-            'linear-gradient(135deg, rgba(187, 247, 208, 0.75), rgba(220, 252, 231, 0.95))',
-            'linear-gradient(135deg, rgba(221, 214, 254, 0.75), rgba(243, 232, 255, 0.95))'
-          ];
+
           
-          const borders = [
-            'rgba(25, 118, 210, 0.2)',
-            'rgba(244, 63, 94, 0.2)',
-            'rgba(34, 197, 94, 0.2)',
-            'rgba(249, 115, 22, 0.2)',
-            'rgba(168, 85, 247, 0.2)',
-            'rgba(3, 155, 229, 0.2)',
-            'rgba(236, 72, 153, 0.2)',
-            'rgba(101, 163, 13, 0.2)',
-            'rgba(25, 118, 210, 0.2)',
-            'rgba(244, 63, 94, 0.2)',
-            'rgba(34, 197, 94, 0.2)',
-            'rgba(168, 85, 247, 0.2)'
-          ];
-          
-          const currentGradient = gradients[index % gradients.length];
-          const currentBorder = borders[index % borders.length];
+
           
           return (
           <div
@@ -282,21 +254,19 @@ function ExplorePage({ isDesktop }) {
             onMouseLeave={() => setHoveredDestId(null)}
             style={{
               padding: isDesktop ? '24px 20px' : '20px 16px',
-              borderRadius: 14,
-              background: currentGradient,
-              border: `1px solid ${currentBorder}`,
+              borderRadius: 12,
+              background: '#ffffff',
+              border: `1px solid ${hoveredDestId === dest.id ? '#cbd5e1' : '#e2e8f0'}`,
+              boxShadow: hoveredDestId === dest.id ? '0 4px 12px rgba(0, 0, 0, 0.08)' : 'none',
               color: '#0f172a',
               cursor: 'pointer',
-              transition: 'all 0.25s ease',
+              transition: 'all 0.25s ease-out',
               textAlign: 'center',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               gap: 10,
-              boxShadow: hoveredDestId === dest.id 
-                ? `0 12px 24px ${currentBorder.replace('0.2', '0.3')}`
-                : `0 3px 10px ${currentBorder.replace('0.2', '0.08')}`,
-              transform: hoveredDestId === dest.id ? 'translateY(-8px) scale(1.02)' : 'translateY(0) scale(1)',
+              transform: hoveredDestId === dest.id ? 'translateY(-2px)' : 'translateY(0)',
               outline: 'none',
               position: 'relative'
             }}
@@ -306,41 +276,39 @@ function ExplorePage({ isDesktop }) {
               <div style={{ 
                 fontSize: isDesktop ? 16 : 15, 
                 fontWeight: 700, 
-                marginBottom: 2,
+                marginBottom: 4,
                 color: '#0f172a'
               }}>
                 {dest.name}
               </div>
               <div style={{ 
                 fontSize: isDesktop ? 12 : 11, 
-                color: '#64748b',
+                color: '#94a3b8',
                 fontWeight: 500,
-                marginBottom: 4
-              }}>
-                {dest.country}
-              </div>
-              <div style={{ 
-                fontSize: isDesktop ? 13 : 12, 
-                color: '#334155',
-                fontWeight: 500,
-                marginBottom: hoveredDestId === dest.id ? 8 : 0,
-                transition: 'all 0.25s ease'
+                marginBottom: 8
               }}>
                 {dest.subtitle}
+              </div>
+              <div style={{ 
+                fontSize: isDesktop ? 11 : 10, 
+                color: '#cbd5e1',
+                fontWeight: 500
+              }}>
+                {dest.country}
               </div>
             </div>
             
             {/* CTA text - appears on hover */}
             {hoveredDestId === dest.id && (
               <div style={{
-                fontSize: isDesktop ? 14 : 13,
+                fontSize: isDesktop ? 12 : 11,
                 fontWeight: 600,
-                color: '#1976d2',
+                color: '#0f172a',
                 marginTop: 4,
                 opacity: 1,
                 animation: 'slideUp 0.3s ease'
               }}>
-                Plan trip →
+                Click to plan →
               </div>
             )}
           </div>

@@ -80,19 +80,19 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
       `}</style>
       
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 40 }}>
         <h1 style={{
           color: '#0f172a',
-          fontSize: isDesktop ? 32 : 24,
+          fontSize: isDesktop ? 42 : 32,
           fontWeight: 800,
           marginBottom: 8,
-          letterSpacing: '-0.5px'
+          letterSpacing: '-1px'
         }}>
           My Trips
         </h1>
         <p style={{
-          color: '#64748b',
-          fontSize: isDesktop ? 16 : 14
+          color: '#94a3b8',
+          fontSize: isDesktop ? 15 : 14
         }}>
           {savedTrips.length} saved {savedTrips.length === 1 ? 'trip' : 'trips'}
         </p>
@@ -106,7 +106,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
         maxWidth: '1200px'
       }}>
         {savedTrips.map((trip) => {
-          const { tripContext, savedAt, id } = trip;
+          const { tripContext = {}, savedAt, id } = trip;
+          if (!tripContext || !id) return null;
           const date = new Date(savedAt);
           const formattedDate = date.toLocaleDateString('en-IN', { 
             day: 'numeric', 
@@ -121,77 +122,23 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
               style={{
                 padding: isDesktop ? 24 : 20,
                 borderRadius: 12,
-                background: (() => {
-                  const gradients = [
-                    'linear-gradient(135deg, rgba(191, 219, 254, 0.75), rgba(219, 234, 254, 0.95))',
-                    'linear-gradient(135deg, rgba(254, 205, 211, 0.75), rgba(254, 226, 226, 0.95))',
-                    'linear-gradient(135deg, rgba(187, 247, 208, 0.75), rgba(220, 252, 231, 0.95))',
-                    'linear-gradient(135deg, rgba(254, 215, 170, 0.75), rgba(254, 243, 199, 0.95))',
-                    'linear-gradient(135deg, rgba(221, 214, 254, 0.75), rgba(243, 232, 255, 0.95))'
-                  ];
-                  return gradients[savedTrips.indexOf(trip) % gradients.length];
-                })(),
-                border: (() => {
-                  const borders = [
-                    'rgba(25, 118, 210, 0.2)',
-                    'rgba(244, 63, 94, 0.2)',
-                    'rgba(34, 197, 94, 0.2)',
-                    'rgba(249, 115, 22, 0.2)',
-                    'rgba(168, 85, 247, 0.2)'
-                  ];
-                  return '1px solid ' + borders[savedTrips.indexOf(trip) % borders.length];
-                })(),
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                boxShadow: 'none',
                 cursor: 'pointer',
-                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition: 'all 0.25s ease-out',
                 position: 'relative',
                 overflow: 'hidden'
               }}
               onMouseEnter={(e) => {
-                const hoverGradients = [
-                  'linear-gradient(135deg, rgba(25, 118, 210, 0.4), rgba(25, 118, 210, 0.3))',
-                  'linear-gradient(135deg, rgba(244, 63, 94, 0.4), rgba(244, 63, 94, 0.3))',
-                  'linear-gradient(135deg, rgba(34, 197, 94, 0.4), rgba(34, 197, 94, 0.3))',
-                  'linear-gradient(135deg, rgba(249, 115, 22, 0.4), rgba(249, 115, 22, 0.3))',
-                  'linear-gradient(135deg, rgba(168, 85, 247, 0.4), rgba(168, 85, 247, 0.3))'
-                ];
-                const hoverBorders = [
-                  'rgba(25, 118, 210, 0.5)',
-                  'rgba(244, 63, 94, 0.5)',
-                  'rgba(34, 197, 94, 0.5)',
-                  'rgba(249, 115, 22, 0.5)',
-                  'rgba(168, 85, 247, 0.5)'
-                ];
-                const hoverShadows = [
-                  'rgba(25, 118, 210, 0.3)',
-                  'rgba(244, 63, 94, 0.3)',
-                  'rgba(34, 197, 94, 0.3)',
-                  'rgba(249, 115, 22, 0.3)',
-                  'rgba(168, 85, 247, 0.3)'
-                ];
-                const idx = savedTrips.indexOf(trip) % 5;
-                e.currentTarget.style.background = hoverGradients[idx];
-                e.currentTarget.style.borderColor = hoverBorders[idx];
-                e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px ' + hoverShadows[idx];
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
               }}
               onMouseLeave={(e) => {
-                const gradients = [
-                  'linear-gradient(135deg, rgba(191, 219, 254, 0.75), rgba(219, 234, 254, 0.95))',
-                  'linear-gradient(135deg, rgba(254, 205, 211, 0.75), rgba(254, 226, 226, 0.95))',
-                  'linear-gradient(135deg, rgba(187, 247, 208, 0.75), rgba(220, 252, 231, 0.95))',
-                  'linear-gradient(135deg, rgba(254, 215, 170, 0.75), rgba(254, 243, 199, 0.95))',
-                  'linear-gradient(135deg, rgba(221, 214, 254, 0.75), rgba(243, 232, 255, 0.95))'
-                ];
-                const borders = [
-                  'rgba(25, 118, 210, 0.2)',
-                  'rgba(244, 63, 94, 0.2)',
-                  'rgba(34, 197, 94, 0.2)',
-                  'rgba(249, 115, 22, 0.2)',
-                  'rgba(168, 85, 247, 0.2)'
-                ];
-                const idx = savedTrips.indexOf(trip) % 5;
-                e.currentTarget.style.background = gradients[idx];
-                e.currentTarget.style.borderColor = '1px solid ' + borders[idx];
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.borderColor = '#e2e8f0';
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = 'none';
               }}
@@ -205,30 +152,27 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
                   right: 12,
                   padding: '6px 10px',
                   borderRadius: 6,
-                  background: 'rgba(244, 67, 54, 0.15)',
-                  border: '1px solid rgba(244, 67, 54, 0.3)',
-                  color: '#ef5350',
-                  fontSize: 12,
-                  fontWeight: 600,
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: 16,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   zIndex: 10
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(244, 67, 54, 0.25)';
-                  e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.5)';
+                  e.currentTarget.style.color = '#ef5350';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(244, 67, 54, 0.15)';
-                  e.currentTarget.style.borderColor = 'rgba(244, 67, 54, 0.3)';
+                  e.currentTarget.style.color = '#94a3b8';
                 }}
               >
-                🗑️
+                ✕
               </button>
 
               {/* Trip Icon */}
               <div style={{
-                fontSize: 40,
+                fontSize: 36,
                 marginBottom: 16
               }}>
                 {tripContext.pace === 'family' ? '👨‍👩‍👧' : 
@@ -239,7 +183,7 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
               {/* Destination */}
               <h3 style={{
                 color: '#0f172a',
-                fontSize: isDesktop ? 20 : 18,
+                fontSize: isDesktop ? 18 : 16,
                 fontWeight: 700,
                 marginBottom: 12,
                 letterSpacing: '-0.3px'
@@ -261,8 +205,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    color: '#1976d2',
-                    fontSize: 14
+                    color: '#475569',
+                    fontSize: 13
                   }}>
                     <span>📅</span>
                     <span>{tripContext.days} days</span>
@@ -273,8 +217,8 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
-                    color: '#388e3c',
-                    fontSize: 14
+                    color: '#475569',
+                    fontSize: 13
                   }}>
                     <span>🎯</span>
                     <span style={{ textTransform: 'capitalize' }}>{tripContext.pace}</span>
@@ -284,7 +228,7 @@ function MyTripsPage({ isDesktop, setLastPlan, setTripContext }) {
 
               {/* Saved Date */}
               <div style={{
-                color: '#6b7280',
+                color: '#cbd5e1',
                 fontSize: 12,
                 fontWeight: 500
               }}>

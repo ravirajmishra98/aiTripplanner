@@ -172,12 +172,12 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
         {/* Primary Planning Form */}
         <form onSubmit={handleFormSubmit} style={{
           width: '100%',
-          marginBottom: 16,
-          background: 'linear-gradient(135deg, rgba(147, 197, 253, 0.65), rgba(196, 181, 253, 0.55), rgba(253, 186, 116, 0.5))',
-          border: '1px solid rgba(99, 102, 241, 0.35)',
-          boxShadow: '0 4px 20px rgba(99, 102, 241, 0.25)',
-          borderRadius: 16,
-          padding: isDesktop ? '14px' : '12px',
+          marginBottom: 48,
+          background: '#e0e7f1',
+          border: 'none',
+          boxShadow: 'none',
+          borderRadius: 12,
+          padding: isDesktop ? '32px 28px' : '24px 20px',
           overflow: 'hidden'
         }}>
           <div style={{
@@ -291,32 +291,31 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
                 type="submit"
                 disabled={!canSubmitForm}
                 style={{
-                  width: 'auto',
-                  padding: isDesktop ? '14px 18px' : '12px 16px',
-                  borderRadius: 12,
-                  background: canSubmitForm ? 'linear-gradient(135deg, #1976d2, #2196f3)' : 'rgba(25,118,210,0.3)',
+                  width: '100%',
+                  padding: '14px 24px',
+                  borderRadius: 8,
+                  background: canSubmitForm ? '#0f172a' : 'rgba(15, 23, 42, 0.4)',
                   border: 'none',
                   color: '#fff',
-                  fontSize: isDesktop ? 16 : 15,
-                  fontWeight: 700,
+                  fontSize: 14,
+                  fontWeight: 600,
                   cursor: canSubmitForm ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: canSubmitForm ? '0 6px 20px rgba(25,118,210,0.35)' : 'none',
-                  letterSpacing: '0.2px',
+                  transition: 'all 0.2s ease-out',
+                  boxShadow: canSubmitForm ? '0 2px 8px rgba(0, 0, 0, 0.15)' : 'none',
+                  letterSpacing: '0.3px',
                   whiteSpace: 'nowrap',
-                  minWidth: '160px',
-                  maxWidth: '220px'
+                  height: 'auto'
                 }}
                 onMouseEnter={(e) => {
                   if (canSubmitForm) {
-                    e.target.style.transform = 'translateY(-2px) scale(1.02)';
-                    e.target.style.boxShadow = '0 10px 28px rgba(25,118,210,0.45)';
+                    e.target.style.transform = 'translateY(-1px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (canSubmitForm) {
-                    e.target.style.transform = 'translateY(0) scale(1)';
-                    e.target.style.boxShadow = '0 6px 20px rgba(25,118,210,0.35)';
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
                   }
                 }}
               >
@@ -326,167 +325,92 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
           </div>
         </form>
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ textAlign: 'center', marginBottom: 48 }}>
           <h1 style={{
             color: 'var(--text)',
-            fontSize: isDesktop ? 36 : 28,
+            fontSize: isDesktop ? 42 : 32,
             fontWeight: 800,
-            marginBottom: 8,
+            marginBottom: 12,
             letterSpacing: '-1px',
             lineHeight: 1.1
-          }}>Plan your trip</h1>
+          }}>Plan your trip in seconds</h1>
           <p style={{
-            color: '#334155',
-            fontSize: isDesktop ? 15 : 14,
-            lineHeight: 1.5,
-            maxWidth: '520px',
+            color: '#64748b',
+            fontSize: isDesktop ? 16 : 14,
+            lineHeight: 1.6,
+            maxWidth: '560px',
             margin: '0 auto',
             fontWeight: 400
           }}>
-            Get personalized travel plans in seconds. Pick a trip idea or describe your perfect vacation—we'll handle the details.
+            Use the form above or pick a trip idea to get started instantly.
           </p>
         </div>
 
         {/* Trip Ideas Section */}
         <div style={{
           width: '100%',
-          marginBottom: 32
+          marginBottom: 48
         }}>
           <div style={{
-            color: '#0f172a',
-            fontSize: isDesktop ? 22 : 20,
-            fontWeight: 700,
-            marginBottom: 20,
-            textAlign: 'center',
-            letterSpacing: '-0.3px'
+            color: '#64748b',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+            marginBottom: 24,
+            textAlign: 'center'
           }}>Popular Trip Ideas</div>
           
           <div style={{
             display: 'grid',
             gridTemplateColumns: isDesktop ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
-            gap: isDesktop ? 16 : 12
+            gap: isDesktop ? 20 : 16,
+            maxWidth: '900px',
+            margin: '0 auto'
           }}>
             {[
-              { emoji: '🏖️', title: 'First-time Goa', subtitle: '5 days • Beaches', query: 'Create a 5-day trip to Goa. Budget: moderate. Include beaches, water sports, nightlife in North Goa. 3-star hotels, recommended restaurants. Luxury travel style.' },
-              { emoji: '🌄', title: 'Weekend Getaway', subtitle: '3 days • Nearby', query: 'Plan a 3-day weekend trip to Shimla. Budget-friendly. Include scenic walks, local markets, cozy cafes. Adventure travel style. Budget accommodation.' },
-              { emoji: '💰', title: 'Budget Trip', subtitle: 'Under ₹10k', query: 'Create a solo budget trip to Jaipur for 4 days. Budget under 10000 rupees. Visit City Palace, Hawa Mahal, local markets. Budget hotels, street food.' },
-              { emoji: '👨‍👩‍👧', title: 'Parents ke saath', subtitle: '5 days • Comfort', query: 'Plan a comfortable family trip to Kerala for 5 days. With family. Include backwater houseboat, Munnar hills, relaxing activities. 4-star hotels, family-friendly restaurants.' },
-              { emoji: '🧘', title: 'Relaxed Vacation', subtitle: '7 days • Leisure', query: 'Design a 7-day couple relaxation vacation to Udaipur. With partner. Focus on leisure, spa, yoga, lake views. 5-star hotel, fine dining, rejuvenation activities.' },
-              { emoji: '🏔️', title: 'Adventure Trip', subtitle: '6 days • Thrilling', query: 'Create a 6-day solo adventure trip to Manali. Include trekking, paragliding, river rafting, camping. Budget hotels, local guides, high energy activities.' }
+              { emoji: '🏖️', title: 'First-time Goa', subtitle: '5 days • Beaches', query: 'Create a 5-day trip to Goa. Budget: moderate. Include beaches, water sports, nightlife in North Goa. 3-star hotels, recommended restaurants. Leisure travel style.' },
+              { emoji: '🌄', title: 'Weekend Getaway', subtitle: '3 days • Nearby', query: 'Plan a 3-day weekend trip to Shimla. Budget-friendly. Include scenic walks, local markets, cozy cafes. Leisure travel style. Budget accommodation.' },
+              { emoji: '💰', title: 'Budget Trip', subtitle: '4 days • Under 10k', query: 'Create a solo budget trip to Jaipur for 4 days. Budget under 10000 rupees. Visit City Palace, Hawa Mahal, local markets. Budget hotels, street food.' },
+              { emoji: '👨‍👩‍👧', title: 'Family Comfort', subtitle: '5 days • Relaxed', query: 'Plan a comfortable family trip to Kerala for 5 days. Include backwater houseboat, Munnar hills, relaxing activities. 4-star hotels, family-friendly restaurants.' },
+              { emoji: '🧘', title: 'Relaxation', subtitle: '7 days • Leisure', query: 'Design a 7-day couple relaxation vacation to Udaipur. Focus on leisure, spa, yoga, lake views. 5-star hotel, fine dining, rejuvenation activities.' },
+              { emoji: '🏔️', title: 'Adventure', subtitle: '6 days • Thrilling', query: 'Create a 6-day solo adventure trip to Manali. Include trekking, paragliding, river rafting, camping. Budget hotels, local guides, high energy activities.' }
             ].map((idea, idx) => (
               <button
                 key={idx}
                 onClick={() => handleTripIdea(idea)}
                 style={{
-                  padding: isDesktop ? '24px 20px' : '18px 14px',
-                  borderRadius: 14,
-                  background: (() => {
-                    const gradients = [
-                      'linear-gradient(135deg, rgba(191, 219, 254, 0.7), rgba(219, 234, 254, 0.9))',
-                      'linear-gradient(135deg, rgba(254, 205, 211, 0.7), rgba(254, 226, 226, 0.9))',
-                      'linear-gradient(135deg, rgba(187, 247, 208, 0.7), rgba(220, 252, 231, 0.9))',
-                      'linear-gradient(135deg, rgba(254, 215, 170, 0.7), rgba(254, 243, 199, 0.9))',
-                      'linear-gradient(135deg, rgba(221, 214, 254, 0.7), rgba(243, 232, 255, 0.9))',
-                      'linear-gradient(135deg, rgba(186, 230, 253, 0.7), rgba(224, 242, 254, 0.9))'
-                    ];
-                    return gradients[idx % gradients.length];
-                  })(),
-                  border: (() => {
-                    const borders = [
-                      'rgba(25, 118, 210, 0.2)',
-                      'rgba(244, 63, 94, 0.2)',
-                      'rgba(34, 197, 94, 0.2)',
-                      'rgba(249, 115, 22, 0.2)',
-                      'rgba(168, 85, 247, 0.2)',
-                      'rgba(3, 155, 229, 0.2)'
-                    ];
-                    return '1px solid ' + borders[idx % borders.length];
-                  })(),
+                  padding: isDesktop ? '28px 24px' : '20px 16px',
+                  borderRadius: 12,
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
                   color: '#0f172a',
                   cursor: 'pointer',
-                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                  transition: 'all 0.25s ease-out',
                   textAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 10,
-                  boxShadow: (() => {
-                    const shadows = [
-                      'rgba(25, 118, 210, 0.1)',
-                      'rgba(244, 63, 94, 0.1)',
-                      'rgba(34, 197, 94, 0.1)',
-                      'rgba(249, 115, 22, 0.1)',
-                      'rgba(168, 85, 247, 0.1)',
-                      'rgba(3, 155, 229, 0.1)'
-                    ];
-                    return '0 3px 10px ' + shadows[idx % shadows.length];
-                  })()
+                  gap: 12,
+                  boxShadow: 'none'
                 }}
                 onMouseEnter={(e) => {
-                  const hoverGradients = [
-                    'linear-gradient(135deg, rgba(25, 118, 210, 0.35), rgba(25, 118, 210, 0.25))',
-                    'linear-gradient(135deg, rgba(244, 63, 94, 0.35), rgba(244, 63, 94, 0.25))',
-                    'linear-gradient(135deg, rgba(34, 197, 94, 0.35), rgba(34, 197, 94, 0.25))',
-                    'linear-gradient(135deg, rgba(249, 115, 22, 0.35), rgba(249, 115, 22, 0.25))',
-                    'linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(168, 85, 247, 0.25))',
-                    'linear-gradient(135deg, rgba(3, 155, 229, 0.35), rgba(3, 155, 229, 0.25))'
-                  ];
-                  const hoverBorders = [
-                    'rgba(25, 118, 210, 0.4)',
-                    'rgba(244, 63, 94, 0.4)',
-                    'rgba(34, 197, 94, 0.4)',
-                    'rgba(249, 115, 22, 0.4)',
-                    'rgba(168, 85, 247, 0.4)',
-                    'rgba(3, 155, 229, 0.4)'
-                  ];
-                  const hoverShadows = [
-                    'rgba(25, 118, 210, 0.25)',
-                    'rgba(244, 63, 94, 0.25)',
-                    'rgba(34, 197, 94, 0.25)',
-                    'rgba(249, 115, 22, 0.25)',
-                    'rgba(168, 85, 247, 0.25)',
-                    'rgba(3, 155, 229, 0.25)'
-                  ];
-                  e.currentTarget.style.background = hoverGradients[idx % hoverGradients.length];
-                  e.currentTarget.style.borderColor = hoverBorders[idx % hoverBorders.length];
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px ' + hoverShadows[idx % hoverShadows.length];
+                  e.currentTarget.style.background = '#ffffff';
+                  e.currentTarget.style.borderColor = '#cbd5e1';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
                 }}
                 onMouseLeave={(e) => {
-                  const gradients = [
-                    'linear-gradient(135deg, rgba(191, 219, 254, 0.7), rgba(219, 234, 254, 0.9))',
-                    'linear-gradient(135deg, rgba(254, 205, 211, 0.7), rgba(254, 226, 226, 0.9))',
-                    'linear-gradient(135deg, rgba(187, 247, 208, 0.7), rgba(220, 252, 231, 0.9))',
-                    'linear-gradient(135deg, rgba(254, 215, 170, 0.7), rgba(254, 243, 199, 0.9))',
-                    'linear-gradient(135deg, rgba(221, 214, 254, 0.7), rgba(243, 232, 255, 0.9))',
-                    'linear-gradient(135deg, rgba(186, 230, 253, 0.7), rgba(224, 242, 254, 0.9))'
-                  ];
-                  const borders = [
-                    'rgba(25, 118, 210, 0.2)',
-                    'rgba(244, 63, 94, 0.2)',
-                    'rgba(34, 197, 94, 0.2)',
-                    'rgba(249, 115, 22, 0.2)',
-                    'rgba(168, 85, 247, 0.2)',
-                    'rgba(3, 155, 229, 0.2)'
-                  ];
-                  const shadows = [
-                    'rgba(25, 118, 210, 0.1)',
-                    'rgba(244, 63, 94, 0.1)',
-                    'rgba(34, 197, 94, 0.1)',
-                    'rgba(249, 115, 22, 0.1)',
-                    'rgba(168, 85, 247, 0.1)',
-                    'rgba(3, 155, 229, 0.1)'
-                  ];
-                  e.currentTarget.style.background = gradients[idx % gradients.length];
-                  e.currentTarget.style.borderColor = borders[idx % borders.length];
+                  e.currentTarget.style.background = '#ffffff';
+                  e.currentTarget.style.borderColor = '#e2e8f0';
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 3px 10px ' + shadows[idx % shadows.length];
+                  e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                <div style={{ fontSize: isDesktop ? 42 : 38 }}>{idea.emoji}</div>
+                <div style={{ fontSize: isDesktop ? 40 : 36 }}>{idea.emoji}</div>
                 <div>
                   <div style={{ fontSize: isDesktop ? 15 : 14, fontWeight: 700, marginBottom: 4, color: '#0f172a' }}>{idea.title}</div>
-                  <div style={{ fontSize: isDesktop ? 13 : 12, color: '#64748b', fontWeight: 500 }}>{idea.subtitle}</div>
+                  <div style={{ fontSize: isDesktop ? 12 : 11, color: '#94a3b8', fontWeight: 500 }}>{idea.subtitle}</div>
                 </div>
               </button>
             ))}
@@ -494,46 +418,37 @@ function HomePage({ isDesktop, loading, setLoading, setLastPlan, setTripContext,
         </div>
 
         {/* Custom Trip Button */}
-        <div style={{ marginTop: 24, textAlign: 'center' }}>
-          <div style={{
-            color: '#7a8a99',
-            fontSize: 13,
-            marginBottom: 14,
-            textTransform: 'uppercase',
-            letterSpacing: '1.2px',
-            fontWeight: 600
-          }}>
-            Or create custom
-          </div>
+        <div style={{ textAlign: 'center' }}>
           <button
             onClick={() => setShowAssistant(true)}
             style={{
-              padding: isDesktop ? '16px 40px' : '14px 32px',
-              borderRadius: 12,
-              background: 'linear-gradient(135deg, #1976d2, #2196f3)',
+              padding: '14px 32px',
+              borderRadius: 8,
+              background: '#0f172a',
               border: 'none',
               color: '#fff',
-              fontSize: isDesktop ? 16 : 15,
-              fontWeight: 700,
+              fontSize: 14,
+              fontWeight: 600,
               cursor: 'pointer',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: '0 6px 20px rgba(25, 118, 210, 0.35)',
+              transition: 'all 0.2s ease-out',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 10,
-              letterSpacing: '0.2px'
+              letterSpacing: '0.3px',
+              height: 'auto'
             }}
             onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px) scale(1.02)';
-              e.target.style.boxShadow = '0 10px 28px rgba(25, 118, 210, 0.45)';
+              e.target.style.transform = 'translateY(-1px)';
+              e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
             }}
             onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0) scale(1)';
-              e.target.style.boxShadow = '0 6px 20px rgba(25, 118, 210, 0.35)';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
             }}
           >
-            <span style={{ fontSize: 20 }}>✨</span>
-            <span>Talk to Assistant</span>
+            <span style={{ fontSize: 18 }}>💬</span>
+            <span>Talk to AI Assistant</span>
           </button>
         </div>
 

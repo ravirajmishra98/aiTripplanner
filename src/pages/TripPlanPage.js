@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { createTripPlan } from '../utils/tripPlanner';
-import { generateAIItinerary, explainTripPlanWithAI, refineItineraryWithAI } from '../services/aiService';
+import { generateAIItinerary, explainTripPlanWithAI, getFlightRecommendation, getHotelRecommendation, getHotelRecommendations } from '../services/aiService';
 
 function TripPlanPage({ 
   isDesktop, 
@@ -9,49 +9,32 @@ function TripPlanPage({
   setLastPlan,
   tripContext, 
   setTripContext,
-  messages,
-  setMessages,
   setShowAssistant
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const generationInProgressRef = useRef(false);
-  const initialPlanIdRef = useRef(null);
-  const [openSection, setOpenSection] = useState(null);
-  const [expandedDay, setExpandedDay] = useState(null);
-  const [activeDay, setActiveDay] = useState(1);
+  const [expandedDay, setExpandedDay] = useState(1);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiExplanation, setAiExplanation] = useState(null);
-  const [refinementLoading, setRefinementLoading] = useState(false);
+  const [flightRec, setFlightRec] = useState(null);
+  const [hotelRec, setHotelRec] = useState(null);
+  const [hotelsList, setHotelsList] = useState(null);
 
-  // Handle incoming router state from trip idea cards, explore destinations, and home form
+  // Handle incoming router state
   useEffect(() => {
     if (location.state?.source === 'trip-idea') {
       const { tripPlan, tripContext: incomingContext } = location.state;
       if (tripPlan && incomingContext) {
         setLastPlan(tripPlan);
         setTripContext(incomingContext);
-        // Ensure assistant stays closed for trip-idea navigation
         setShowAssistant(false);
-        // Clear the state to prevent re-initialization on navigation back
         window.history.replaceState({}, document.title);
       }
     } else if (location.state?.source === 'explore') {
       const { destination, numberOfDays, travelType, intents } = location.state;
       if (destination && numberOfDays) {
-        // Create a trip plan from explore destination
-        let intentsText = '';
-        if (intents && intents.length > 0) {
-          const intentLabels = {
-            'weekend': '3-day weekend trip',
-            'family': 'family-friendly',
-            'budget': 'budget-conscious',
-            'relaxed': 'relaxed and leisurely'
-          };
-          intentsText = ' - ' + intents.map(id => intentLabels[id] || id).join(', ');
-        }
-        
         const plan = {
           parsed: {
             sourceCity: '',
@@ -63,23 +46,15 @@ function TripPlanPage({
           itinerary: {
             plan: Array.from({ length: numberOfDays }, (_, i) => ({
               day: i + 1,
-              activity: `Day ${i + 1} in ${destination}${intentsText}`,
-              purpose: i === 0 ? 'travel' : i === numberOfDays - 1 ? 'travel' : i <= Math.ceil((numberOfDays - 2) * 0.7) ? 'explore' : 'relax'
+              activity: `Day ${i + 1} in ${destination}`,
+              purpose: i === 0 ? 'travel' : i === numberOfDays - 1 ? 'travel' : 'explore'
             }))
           }
         };
         
-        const context = {
-          from: '',
-          to: destination,
-          days: numberOfDays,
-          pace: travelType || 'leisure'
-        };
-        
         setLastPlan(plan);
-        setTripContext(context);
+        setTripContext({ from: '', to: destination, days: numberOfDays, pace: travelType || 'leisure' });
         setShowAssistant(false);
-        // Clear the state to prevent re-initialization on navigation back
         window.history.replaceState({}, document.title);
       }
     } else if (location.state?.source === 'home-form') {
@@ -97,1158 +72,999 @@ function TripPlanPage({
             plan: Array.from({ length: numberOfDays }, (_, i) => ({
               day: i + 1,
               activity: `Day ${i + 1} in ${destination}`,
-              purpose: i === 0 ? 'travel' : i === numberOfDays - 1 ? 'travel' : i <= Math.ceil((numberOfDays - 2) * 0.7) ? 'explore' : 'relax'
+              purpose: 'explore'
             }))
           }
         };
-
-        const context = {
-          from: sourceCity || '',
-          to: destination,
-          days: numberOfDays,
-          pace: tripType || 'solo'
-        };
-
+        
         setLastPlan(plan);
-        setTripContext(context);
+        setTripContext({ from: sourceCity || '', to: destination, days: numberOfDays, pace: tripType || 'solo' });
         setShowAssistant(false);
         window.history.replaceState({}, document.title);
       }
     }
-  }, []);
+  }, [location.state]);
 
-  // Handle redirect delay - give state time to update from HomePage
+  // Generate AI itinerary
   useEffect(() => {
-    if (!lastPlan) {
-      const timer = setTimeout(() => {
-        if (!lastPlan) {
-          navigate('/');
-        }
-      }, 200);
-      return () => clearTimeout(timer);
-    }
-  }, [lastPlan, navigate]);
+    if (lastPlan && lastPlan.parsed && !generationInProgressRef.current) {
+      const planId = JSON.stringify(lastPlan.parsed);
+      
+      if (!lastPlan.itinerary?.plan?.[0]?.activity?.includes('Morning:') && 
+          !generationInProgressRef.current) {
+        generationInProgressRef.current = true;
+        setAiLoading(true);
 
-  // Generate AI itinerary when plan first loads
-  useEffect(() => {
-    const generateItinerary = async () => {
-      // Prevent concurrent generation
-      if (generationInProgressRef.current || !lastPlan) return;
-      
-      const { sourceCity, destinationCity, numberOfDays, travelType, intents, budget } = lastPlan.parsed || {};
-      if (!destinationCity || !numberOfDays) return;
+        generateAIItinerary({
+          sourceCity: lastPlan.parsed.sourceCity || '',
+          destinationCity: lastPlan.parsed.destinationCity,
+          numberOfDays: lastPlan.parsed.numberOfDays,
+          travelType: lastPlan.parsed.travelType || 'leisure',
+          additionalContext: `\n- Budget: ${lastPlan.parsed.budget || 'flexible'}\n- Interests: ${(lastPlan.parsed.intents || []).join(', ') || 'general sightseeing'}`
+        }).then(result => {
+          if (result && result.itinerary) {
+            const updatedPlan = {
+              ...lastPlan,
+              itinerary: {
+                plan: result.itinerary.map(day => ({
+                  day: day.day,
+                  activity: `${day.title}\n\n${day.plan}`,
+                  purpose: day.purpose || 'explore'
+                }))
+              }
+            };
+            setLastPlan(updatedPlan);
 
-      // Create plan ID from destination + days + intents
-      const planId = destinationCity + numberOfDays + (intents?.join('') || '');
-      
-      // Only generate if this is a NEW plan (not previously generated)
-      if (initialPlanIdRef.current === planId) return;
-      
-      // Mark this plan as being processed
-      generationInProgressRef.current = true;
-      initialPlanIdRef.current = planId;
-      setAiLoading(true);
-      
-      // Build additional context from intents
-      let additionalContext = '';
-      if (intents && intents.length > 0) {
-        const intentDescriptions = {
-          'weekend': 'Make it a quick 3-day weekend trip with the most iconic experiences',
-          'family': 'Ensure it is family-friendly with kid-appropriate activities and accommodations',
-          'budget': 'Keep the budget under 10k per person, focusing on affordable activities and local food',
-          'relaxed': 'Make it a relaxed, leisurely trip with plenty of rest time and no rushed itineraries'
-        };
-        additionalContext = '\n\n' + intents.map(id => intentDescriptions[id]).filter(Boolean).join('\n');
-      }
-      // Budget context
-      if (budget) {
-        const budgetText = budget === 'budget'
-          ? 'Make it budget-friendly: affordable stays, local transport, economical dining.'
-          : budget === 'luxury'
-          ? 'Make it a luxury experience: premium stays, fine dining, private transfers.'
-          : 'Balance cost and comfort with well-rated stays and popular experiences.';
-        additionalContext += `\n${budgetText}`;
-      }
-      // Friends trip nuance
-      if (travelType === 'friends') {
-        additionalContext += '\nPlan for a group of friends with shared fun experiences, nightlife options, and flexible scheduling.';
-      }
-      
-      const aiResult = await generateAIItinerary({
-        sourceCity: sourceCity || 'Your city',
-        destinationCity,
-        numberOfDays: parseInt(numberOfDays) || numberOfDays,
-        travelType: travelType || 'leisure',
-        additionalContext: additionalContext
-      });
-
-      let updatedPlan = lastPlan;
-      
-      if (aiResult && aiResult.itinerary) {
-        // Successfully got AI itinerary - replace the static one
-        updatedPlan = {
-          ...lastPlan,
-          itinerary: {
-            ...lastPlan.itinerary,
-            plan: aiResult.itinerary.map(day => ({
-              day: day.day,
-              activity: `${day.title}. ${day.plan}`,
-              purpose: day.day === 1 ? 'travel' : 
-                       day.day === numberOfDays ? 'travel' : 
-                       day.day <= Math.ceil((numberOfDays - 2) * 0.7) + 1 ? 'explore' : 'relax'
-            }))
+            // Get AI explanation with full trip plan object
+            return explainTripPlanWithAI(updatedPlan).then(explanation => {
+              if (explanation && Array.isArray(explanation)) {
+                setAiExplanation(explanation.slice(0, 3));
+              }
+              // Fetch flight, hotel recommendations, and hotel list
+              return Promise.all([
+                getFlightRecommendation(lastPlan.parsed),
+                getHotelRecommendation(lastPlan.parsed),
+                getHotelRecommendations(lastPlan.parsed)
+              ]);
+            });
           }
-        };
-        setLastPlan(updatedPlan);
+        }).then(recommendations => {
+          if (recommendations && Array.isArray(recommendations)) {
+            setFlightRec(recommendations[0]);
+            setHotelRec(recommendations[1]);
+            setHotelsList(recommendations[2]);
+          }
+        }).catch(err => {
+          console.error('AI generation error:', err);
+        }).finally(() => {
+          setAiLoading(false);
+          generationInProgressRef.current = false;
+        });
       }
-      // If AI fails, existing static itinerary remains (graceful fallback)
-      
-      // Generate AI explanation after itinerary is ready
-      const explanation = await explainTripPlanWithAI(updatedPlan);
-      if (explanation) {
-        setAiExplanation(explanation);
-      }
-      
-      setAiLoading(false);
-      generationInProgressRef.current = false;
-    };
-
-    generateItinerary();
+    }
   }, [lastPlan]);
 
-  // Save trip to localStorage
   const handleSaveTrip = () => {
+    if (!lastPlan || aiLoading) return;
+    
     const savedTrips = JSON.parse(localStorage.getItem('savedTrips') || '[]');
-    const newTrip = {
+    const tripToSave = {
       id: Date.now(),
-      tripContext,
       plan: lastPlan,
+      context: tripContext,
       savedAt: new Date().toISOString()
     };
-    savedTrips.push(newTrip);
+    
+    savedTrips.push(tripToSave);
     localStorage.setItem('savedTrips', JSON.stringify(savedTrips));
     
     setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setTimeout(() => setSaveSuccess(false), 2000);
   };
 
-  // Redirect to home if no plan exists (after delay)
-  if (!lastPlan) {
-    return null;
+  const handleDayClick = (dayNumber) => {
+    setExpandedDay(expandedDay === dayNumber ? null : dayNumber);
+  };
+
+  if (!lastPlan || !lastPlan.parsed) {
+    return (
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#64748b',
+        fontSize: 15
+      }}>
+        No trip plan available. Please create a trip from the home page.
+      </div>
+    );
+  }
+
+  const { parsed, itinerary } = lastPlan;
+  const days = itinerary?.plan || [];
+
+  // Debug: Log the data structure
+  if (days.length > 0) {
+    console.log('Days data:', days.map(d => ({ day: d.day, activityLength: d.activity?.length || 0, preview: d.activity?.substring(0, 100) })));
   }
 
   return (
     <div style={{
       flex: 1,
       display: 'flex',
-      flexDirection: isDesktop ? 'row' : 'column',
-      overflow: 'hidden',
-      height: '100%',
-      position: 'relative'
+      flexDirection: 'column',
+      overflowY: 'auto',
+      background: 'var(--app-bg)'
     }}>
-      {/* AI Loading Overlay */}
+      {/* Loading Overlay */}
       {aiLoading && (
         <div style={{
-          position: 'absolute',
+          position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(255, 255, 255, 0.85)',
+          background: 'rgba(255, 255, 255, 0.95)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(2px)'
+          zIndex: 100,
+          gap: 20
         }}>
           <div style={{
-            width: 48,
-            height: 48,
-            border: '4px solid rgba(25, 118, 210, 0.2)',
-            borderTop: '4px solid #1976d2',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            marginBottom: 20
-          }} />
+            fontSize: 48,
+            animation: 'spin 2s linear infinite'
+          }}>✈️</div>
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
           <div style={{
             color: '#0f172a',
             fontSize: 18,
-            fontWeight: 600,
-            marginBottom: 8
-          }}>
-            Creating a smart itinerary…
-          </div>
-          <div style={{
-            color: '#475569',
-            fontSize: 14
-          }}>
-            This will only take a moment
-          </div>
+            fontWeight: 600
+          }}>Creating your itinerary...</div>
         </div>
       )}
 
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
-
-      {/* Main content area (left on desktop, top on mobile) */}
+      {/* Main Content */}
       <div style={{
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        height: '100%'
+        maxWidth: '900px',
+        width: '100%',
+        margin: '0 auto',
+        padding: isDesktop ? '48px 24px' : '32px 16px'
       }}>
-        {/* Trip context bar */}
-        {tripContext && (
+        {/* 1. TRIP SNAPSHOT */}
+        <div style={{
+          marginBottom: 48
+        }}>
+          {/* Header with Buttons */}
           <div style={{
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-            padding: '12px 16px',
-            background: 'rgba(25, 118, 210, 0.06)',
-            borderBottom: '1px solid var(--border)',
-            zIndex: 30,
-            flexShrink: 0
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: 32,
+            gap: 20
           }}>
-            <div style={{ color: '#0f172a', fontWeight: 600, fontSize: 15 }}>
-              {tripContext.from ? `${tripContext.from} → ${tripContext.to}` : tripContext.to}
+            <div style={{ flex: 1 }}>
+              <h1 style={{
+                fontSize: isDesktop ? 36 : 28,
+                fontWeight: 700,
+                color: '#0f172a',
+                marginBottom: 12,
+                lineHeight: 1.3,
+                letterSpacing: '-0.02em'
+              }}>
+                {parsed.destinationCity}
+              </h1>
+              <div style={{
+                display: 'flex',
+                gap: 20,
+                flexWrap: 'wrap',
+                color: '#64748b',
+                fontSize: 15,
+                lineHeight: 1.6
+              }}>
+                <div>{parsed.numberOfDays} days</div>
+                <div>{parsed.travelType || 'Solo'}</div>
+                {parsed.budget && <div>{parsed.budget}</div>}
+              </div>
             </div>
-            <div style={{ color: '#1976d2' }}>|</div>
-            <div style={{ color: '#0f172a', fontSize: 15 }}>{tripContext.days ? `${tripContext.days} days` : ''}</div>
-            {tripContext.pace && (
-              <>
-                <div style={{ color: '#1976d2' }}>|</div>
-                <div style={{ color: '#0f172a', fontSize: 15 }}>{tripContext.pace}</div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Why this plan works for you - AI-powered */}
-        {lastPlan && aiExplanation && aiExplanation.length > 0 && (
-          <div style={{
-            padding: isDesktop ? '16px 24px' : '14px 16px',
-            background: 'rgba(25, 118, 210, 0.06)',
-            borderBottom: '1px solid var(--border)',
-            flexShrink: 0
-          }}>
-            <div style={{
-              color: '#1976d2',
-              fontSize: 13,
-              fontWeight: 600,
-              marginBottom: 10,
-              letterSpacing: '0.3px'
-            }}>
-              ✨ Why this plan works for you
-            </div>
+            
+            {/* Action Buttons - Top Right */}
             <div style={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: 8
+              gap: 12,
+              flexShrink: 0
             }}>
-              {aiExplanation.map((reason, index) => (
-                <div key={index} style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 8,
+              <button
+                onClick={handleSaveTrip}
+                disabled={aiLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 6,
+                  background: saveSuccess ? '#10b981' : '#0f172a',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: aiLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  opacity: aiLoading ? 0.5 : 1,
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  if (!saveSuccess && !aiLoading) e.target.style.opacity = '0.8';
+                }}
+                onMouseLeave={(e) => {
+                  if (!saveSuccess && !aiLoading) e.target.style.opacity = '1';
+                }}
+              >
+                {saveSuccess ? 'Saved' : 'Save Trip'}
+              </button>
+              <button
+                onClick={() => setShowAssistant(true)}
+                disabled={aiLoading}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 6,
+                  background: 'transparent',
+                  border: '1px solid #cbd5e1',
                   color: '#0f172a',
-                  fontSize: 13,
-                  lineHeight: 1.5
-                }}>
-                  <span style={{ color: '#1976d2', flexShrink: 0 }}>•</span>
-                  <span>{reason}</span>
-                </div>
-              ))}
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: aiLoading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  opacity: aiLoading ? 0.5 : 1,
+                  whiteSpace: 'nowrap'
+                }}
+                onMouseEnter={(e) => {
+                  if (!aiLoading) e.target.style.borderColor = '#94a3b8';
+                }}
+                onMouseLeave={(e) => {
+                  if (!aiLoading) e.target.style.borderColor = '#cbd5e1';
+                }}
+              >
+                Edit Plan
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Trip Plan Content */}
-      <div style={{
-        padding: isDesktop ? '20px 24px' : '16px 16px',
-        borderBottom: '1px solid var(--border)',
-        background: 'var(--surface)',
-        flex: 1,
-        minHeight: 0,
-        zIndex: 25,
-        animation: 'fadeInUp 0.4s ease-in-out',
-        overflowY: 'auto'
-      }}>
-        <style>{`
-          @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
-        <div style={{color: '#64748b', fontSize: 12, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 6}}>Your trip plan</div>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, paddingBottom: 14, borderBottom: '1px solid var(--border)'}}>
-          <div style={{color: '#0f172a', fontWeight: 700, fontSize: isDesktop ? 17 : 16}}>Your Trip Plan</div>
-          <div style={{display: 'flex', gap: 8}}>
-            {isDesktop && (
-              <>
-                <button
-                  onClick={handleSaveTrip}
-                  disabled={aiLoading}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 6,
-                    background: aiLoading ? 'rgba(255, 255, 255, 0.05)' : saveSuccess ? 'rgba(76, 175, 80, 0.15)' : 'rgba(25, 118, 210, 0.15)',
-                    border: aiLoading ? '1px solid rgba(255, 255, 255, 0.1)' : saveSuccess ? '1px solid rgba(76, 175, 80, 0.4)' : '1px solid rgba(25, 118, 210, 0.3)',
-                    color: aiLoading ? '#6b7280' : saveSuccess ? '#388e3c' : '#1976d2',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: aiLoading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    minWidth: 100,
-                    opacity: aiLoading ? 0.5 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!saveSuccess) {
-                      e.target.style.background = 'rgba(25, 118, 210, 0.25)';
-                      e.target.style.borderColor = 'rgba(25, 118, 210, 0.5)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!saveSuccess) {
-                      e.target.style.background = 'rgba(25, 118, 210, 0.15)';
-                      e.target.style.borderColor = 'rgba(25, 118, 210, 0.3)';
-                    }
-                  }}
-                >
-                  {saveSuccess ? '✓ Saved' : '💾 Save Trip'}
-                </button>
-                <button
-                  onClick={() => setShowAssistant(true)}
-                  disabled={aiLoading}
-                  style={{
-                    padding: '8px 16px',
-                    borderRadius: 6,
-                    background: aiLoading ? 'rgba(15, 23, 42, 0.03)' : 'rgba(15, 23, 42, 0.05)',
-                    border: '1px solid var(--border)',
-                    color: aiLoading ? '#6b7280' : '#0f172a',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: aiLoading ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.2s',
-                    opacity: aiLoading ? 0.5 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.12)';
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-                  }}
-                >
-                  ✏️ Refine
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        
-        <div style={{display: 'grid', gridTemplateColumns: '1fr', gap: 10}}>
-          {/* Flight Card - Accordion */}
-          <div style={{
-            borderRadius: 8,
-            background: openSection === 'flight' ? 'rgba(66, 165, 245, 0.06)' : 'rgba(66, 165, 245, 0.03)',
-            border: '1px solid rgba(66, 165, 245, 0.15)',
-            overflow: 'hidden',
-            transition: 'all 0.2s ease'
-          }}>
-            <div 
-              onClick={() => setOpenSection(openSection === 'flight' ? null : 'flight')}
-              style={{
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                padding: '13px 16px',
-                cursor: 'pointer',
-                background: 'transparent',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(66, 165, 245, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{display: 'flex', alignItems: 'center', gap: 9}}>
-                <span style={{fontSize: 17}}>✈️</span>
-                <div style={{color: '#1976d2', fontWeight: 600, fontSize: 14}}>Flight</div>
-              </div>
-              <span style={{color: '#1976d2', fontSize: 14, transform: openSection === 'flight' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', display: 'inline-block'}}>▼</span>
-            </div>
-            {openSection === 'flight' && (
-              <div style={{padding: '0 16px 16px 16px'}}>
-                <div style={{color: '#e3f2fd', fontSize: 14, fontWeight: 600, marginBottom: 8}}>
-                  Book a {lastPlan.flight?.type || 'direct'} {lastPlan.flight?.timing || 'morning'} flight
-                </div>
-                <div style={{color: '#0f172a', fontSize: 13, lineHeight: 1.5}}>
-                  <strong>Why?</strong> {lastPlan.flight?.timing === 'morning' 
-                    ? 'Morning flights help you arrive fresh and make the most of your first day.' 
-                    : 'Evening departures give you a full day before travel and arrive relaxed.'} {lastPlan.flight?.type === 'direct' 
-                    ? 'Direct flights save time and avoid connection hassles.' 
-                    : 'One-stop options offer better flexibility and often better prices.'}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Hotel Card - Accordion */}
-          <div style={{
-            borderRadius: 8,
-            background: openSection === 'hotel' ? 'rgba(102, 187, 106, 0.06)' : 'rgba(102, 187, 106, 0.03)',
-            border: '1px solid rgba(102, 187, 106, 0.15)',
-            overflow: 'hidden',
-            transition: 'all 0.2s ease'
-          }}>
-            <div 
-              onClick={() => setOpenSection(openSection === 'hotel' ? null : 'hotel')}
-              style={{
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                padding: '13px 16px',
-                cursor: 'pointer',
-                background: 'transparent',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(102, 187, 106, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{display: 'flex', alignItems: 'center', gap: 9}}>
-                <span style={{fontSize: 17}}>🏨</span>
-                <div style={{color: '#81c784', fontWeight: 600, fontSize: 14}}>Hotel Area</div>
-              </div>
-              <span style={{color: '#81c784', fontSize: 14, transform: openSection === 'hotel' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', display: 'inline-block'}}>▼</span>
-            </div>
-            {openSection === 'hotel' && (
-              <div style={{padding: '0 16px 16px 16px'}}>
-                <div style={{color: '#c8e6c9', fontSize: 14, fontWeight: 600, marginBottom: 8}}>
-                  Stay in {lastPlan.hotelArea?.area || 'city center'}
-                </div>
-                <div style={{color: '#81c784', fontSize: 13, lineHeight: 1.5}}>
-                  <strong>Why?</strong> {lastPlan.hotelArea?.area?.includes('central') || lastPlan.hotelArea?.area?.includes('city center')
-                    ? 'Central locations put you minutes away from top attractions and save valuable travel time.'
-                    : lastPlan.hotelArea?.area?.includes('near main attractions')
-                    ? 'Being close to main attractions means easy access for the whole family with minimal transit.'
-                    : lastPlan.hotelArea?.area?.includes('quiet') || lastPlan.hotelArea?.area?.includes('scenic')
-                    ? 'Peaceful areas offer better rest and a more intimate experience away from tourist crowds.'
-                    : lastPlan.hotelArea?.area?.includes('peaceful')
-                    ? 'Longer stays demand tranquility—this area ensures you recharge properly each day.'
-                    : 'This location balances convenience with comfort, giving you the best of both worlds.'}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          {/* Itinerary Card - Accordion */}
-          <div style={{
-            borderRadius: 8,
-            background: openSection === 'itinerary' ? 'rgba(255, 152, 0, 0.06)' : 'rgba(255, 152, 0, 0.03)',
-            border: '1px solid rgba(255, 152, 0, 0.15)',
-            overflow: 'hidden',
-            transition: 'all 0.2s ease'
-          }}>
-            <div 
-              onClick={() => setOpenSection(openSection === 'itinerary' ? null : 'itinerary')}
-              style={{
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between',
-                padding: '13px 16px',
-                cursor: 'pointer',
-                background: 'transparent',
-                transition: 'background 0.15s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 152, 0, 0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <div style={{display: 'flex', alignItems: 'center', gap: 9}}>
-                <span style={{fontSize: 17}}>🗓️</span>
-                <div style={{color: '#ffb74d', fontWeight: 600, fontSize: 14}}>Itinerary</div>
-              </div>
-              <span style={{color: '#ffb74d', fontSize: 14, transform: openSection === 'itinerary' ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', display: 'inline-block'}}>▼</span>
-            </div>
-            {openSection === 'itinerary' && (
-              <div style={{padding: '0 16px 16px 16px'}}>
-                {/* Day Navigator + Summary */}
-                {(() => {
-                  const days = lastPlan.itinerary?.plan || [];
-                  const active = days.find(d => d.day === activeDay) || days[0];
-                  const summary = (active?.activity || '').split('. ')[0];
-                  return (
-                    <>
-                      <div style={{
-                        display: 'flex',
-                        overflowX: 'auto',
-                        gap: 8,
-                        padding: '6px 2px 10px 2px'
-                      }}>
-                        {days.map(d => (
-                          <button
-                            key={d.day}
-                            onClick={() => setActiveDay(d.day)}
-                            style={{
-                              padding: '6px 10px',
-                              borderRadius: 14,
-                              border: activeDay === d.day ? '1px solid rgba(255, 152, 0, 0.5)' : '1px solid rgba(255, 255, 255, 0.12)',
-                              background: activeDay === d.day ? 'rgba(255, 152, 0, 0.15)' : 'rgba(255, 255, 255, 0.06)',
-                              color: activeDay === d.day ? '#f59e0b' : '#1976d2',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              whiteSpace: 'nowrap',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Day {d.day}
-                          </button>
-                        ))}
-                      </div>
-                      <div style={{
-                        padding: '12px 12px',
-                        borderRadius: 8,
-                        background: 'rgba(255, 152, 0, 0.06)',
-                        border: '1px solid rgba(255, 152, 0, 0.15)',
-                        marginBottom: 10
-                      }}>
-                        <div style={{ color: '#ffb74d', fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Day {active?.day} Summary</div>
-                        <div style={{ color: '#050505', fontSize: 13, lineHeight: 1.5 }}>{summary || active?.activity}</div>
-                      </div>
-                    </>
-                  );
-                })()}
-                {isDesktop ? (
-                  <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-                    {lastPlan.itinerary?.plan?.map(d => (
-                      <div key={d.day} style={{
-                        background: 'rgba(15, 23, 42, 0.04)',
-                        borderRadius: 6,
-                        borderLeft: '3px solid rgba(255, 152, 0, 0.6)',
-                        overflow: 'hidden'
-                      }}>
-                        <div 
-                          onClick={() => setExpandedDay(expandedDay === d.day ? null : d.day)}
-                          style={{
-                            padding: '11px 12px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            transition: 'background 0.15s ease'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 152, 0, 0.08)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        >
-                          <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
-                            <span style={{fontWeight: 600, color: '#b45309', fontSize: 13}}>Day {d.day}</span>
-                             {d.purpose && (
-                              <span style={{
-                                fontSize: 10,
-                                fontWeight: 600,
-                                padding: '2px 6px',
-                                borderRadius: 4,
-                                 background: d.purpose === 'explore' ? 'rgba(25, 118, 210, 0.15)' : d.purpose === 'relax' ? 'rgba(102, 187, 106, 0.15)' : 'rgba(158, 158, 158, 0.15)',
-                                 color: d.purpose === 'explore' ? '#1976d2' : d.purpose === 'relax' ? '#388e3c' : '#6b7280',
-                                textTransform: 'uppercase',
-                                letterSpacing: '0.5px'
-                              }}>
-                                {d.purpose}
-                              </span>
-                            )}
-                          </div>
-                          <span style={{
-                            color: '#ffb74d', 
-                            fontSize: 12, 
-                            transform: expandedDay === d.day ? 'rotate(180deg)' : 'rotate(0deg)', 
-                            transition: 'transform 0.2s ease',
-                            display: 'inline-block'
-                          }}>▼</span>
-                        </div>
-                        {expandedDay === d.day && (
-                           <div style={{
-                             padding: '0 12px 11px 12px',
-                             color: '#0f172a',
-                            fontSize: 13,
-                            lineHeight: 1.5,
-                            borderTop: '1px solid rgba(255, 152, 0, 0.15)'
-                          }}>
-                            {d.activity}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{display: 'flex', flexDirection: 'column', gap: 8}}>
-                    {lastPlan.itinerary?.plan?.map(d => (
-                       <div key={d.day} style={{
-                         padding: '11px 12px',
-                         background: 'rgba(15, 23, 42, 0.04)',
-                        borderRadius: 6,
-                        borderLeft: '3px solid rgba(255, 152, 0, 0.6)'
-                      }}>
-                        <div style={{display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5}}>
-                          <span style={{fontWeight: 600, color: '#ffe0b2', fontSize: 13}}>Day {d.day}</span>
-                          {d.purpose && (
-                            <span style={{
-                              fontSize: 10,
-                              fontWeight: 600,
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: d.purpose === 'explore' ? 'rgba(66, 165, 245, 0.2)' : d.purpose === 'relax' ? 'rgba(102, 187, 106, 0.2)' : 'rgba(158, 158, 158, 0.2)',
-                              color: d.purpose === 'explore' ? '#90caf9' : d.purpose === 'relax' ? '#81c784' : '#bdbdbd',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}>
-                              {d.purpose}
-                            </span>
-                          )}
-                        </div>
-                         <div style={{color: '#0f172a', fontSize: 13, lineHeight: 1.5}}>{d.activity}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          {/* Booking buttons */}
-          <div style={{marginTop: 6}}>
-            <BookButtons destination={lastPlan.parsed?.destinationCity} days={lastPlan.parsed?.numberOfDays} />
-          </div>
-          
-          {/* Quick Action Buttons */}
-          <div style={{marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8}}>
-            <button onClick={async () => {
-              if (aiLoading || refinementLoading) return;
-              
-              setRefinementLoading(true);
-              
-              const refinedResult = await refineItineraryWithAI({
-                tripPlan: lastPlan,
-                refinementType: 'budget'
-              });
-              
-              if (refinedResult && refinedResult.itinerary) {
-                // Update plan with AI-refined itinerary
-                const updatedPlan = {
-                  ...lastPlan,
-                  itinerary: {
-                    ...lastPlan.itinerary,
-                    plan: refinedResult.itinerary.map(day => ({
-                      day: day.day,
-                      activity: `${day.title}. ${day.plan}`,
-                      purpose: day.day === 1 ? 'travel' : 
-                               day.day === lastPlan.parsed.numberOfDays ? 'travel' : 
-                               day.day <= Math.ceil((lastPlan.parsed.numberOfDays - 2) * 0.7) + 1 ? 'explore' : 'relax'
-                    }))
-                  },
-                  hotelArea: {
-                    area: 'budget-friendly neighborhoods',
-                    reason: 'Affordable areas with good local transport connections keep costs down while staying comfortable.'
-                  }
-                };
-                setLastPlan(updatedPlan);
-                
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Make it more budget friendly' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: 'I\'ve optimized the itinerary for budget travel. Check the changes above.' 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
-              } else {
-                // Fallback to simple update
-                const updatedPlan = {
-                  ...lastPlan,
-                  hotelArea: {
-                    area: 'budget-friendly neighborhoods',
-                    reason: 'Affordable areas with good local transport connections keep costs down while staying comfortable.'
-                  }
-                };
-                setLastPlan(updatedPlan);
-                
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Make it more budget friendly' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: 'I\'ve made the plan more budget-friendly. Check above.' 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
-              }
-              
-              setRefinementLoading(false);
-            }} 
-            disabled={aiLoading || refinementLoading}
-            style={{
-              padding: '10px 10px',
-              borderRadius: 6,
-              border: (aiLoading || refinementLoading) ? '1px solid rgba(76, 175, 80, 0.15)' : '1px solid rgba(76, 175, 80, 0.3)',
-              background: (aiLoading || refinementLoading) ? 'rgba(76, 175, 80, 0.03)' : 'rgba(76, 175, 80, 0.08)',
-              color: (aiLoading || refinementLoading) ? '#4a5d4a' : '#81c784',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: (aiLoading || refinementLoading) ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: (aiLoading || refinementLoading) ? 0.5 : 1
-            }} onMouseEnter={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(76, 175, 80, 0.15)';
-                e.target.style.borderColor = 'rgba(76, 175, 80, 0.5)';
-              }
-            }} onMouseLeave={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(76, 175, 80, 0.08)';
-                e.target.style.borderColor = 'rgba(76, 175, 80, 0.3)';
-              }
+          {/* Trip Rhythm Bar - Visual Summary */}
+          {lastPlan && lastPlan.itinerary && lastPlan.itinerary.plan && lastPlan.itinerary.plan.length > 0 && (
+            <div style={{
+              marginBottom: 48,
+              paddingBottom: 32,
+              borderBottom: '1px solid #e2e8f0'
             }}>
-              {refinementLoading ? '⏳' : '💰'} Budget Friendly
-            </button>
-            
-            <button onClick={async () => {
-              if (aiLoading || refinementLoading) return;
-              
-              setRefinementLoading(true);
-              
-              const refinedResult = await refineItineraryWithAI({
-                tripPlan: lastPlan,
-                refinementType: 'relaxed'
-              });
-              
-              if (refinedResult && refinedResult.itinerary) {
-                // Update plan with AI-refined itinerary
-                const updatedPlan = {
-                  ...lastPlan,
-                  itinerary: {
-                    ...lastPlan.itinerary,
-                    plan: refinedResult.itinerary.map(day => ({
-                      day: day.day,
-                      activity: `${day.title}. ${day.plan}`,
-                      purpose: day.day === 1 ? 'travel' : 
-                               day.day === lastPlan.parsed.numberOfDays ? 'travel' : 'relax'
-                    }))
-                  }
-                };
-                setLastPlan(updatedPlan);
-                
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Make it more relaxed' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: 'I\'ve made the plan more relaxed. Check the itinerary above.' 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
-              } else {
-                // Fallback to simple update
-                const updatedItinerary = lastPlan.itinerary?.plan?.map(day => {
-                  if (day.purpose === 'explore') {
-                    return {
-                      ...day,
-                      activity: day.activity.replace(/Explore iconic landmarks/g, 'Visit a few key landmarks')
-                        .replace(/Discover hidden gems/g, 'Leisurely explore nearby areas')
-                        .replace(/Wander through markets/g, 'Stroll through local spots')
-                        .replace(/Experience adventure activities/g, 'Try light activities at your pace'),
-                      purpose: 'relax'
-                    };
-                  }
-                  return day;
-                });
-                
-                const updatedPlan = {
-                  ...lastPlan,
-                  itinerary: {
-                    ...lastPlan.itinerary,
-                    plan: updatedItinerary
-                  }
-                };
-                setLastPlan(updatedPlan);
-                
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Make it more relaxed' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: 'I\'ve slowed down the itinerary. Check above.' 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
-              }
-              
-              setRefinementLoading(false);
-            }} 
-            disabled={aiLoading || refinementLoading}
-            style={{
-              padding: '10px 10px',
-              borderRadius: 6,
-              border: (aiLoading || refinementLoading) ? '1px solid rgba(255, 193, 7, 0.15)' : '1px solid rgba(255, 193, 7, 0.3)',
-              background: (aiLoading || refinementLoading) ? 'rgba(255, 193, 7, 0.03)' : 'rgba(255, 193, 7, 0.08)',
-              color: (aiLoading || refinementLoading) ? '#6b5c3a' : '#ffb74d',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: (aiLoading || refinementLoading) ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: (aiLoading || refinementLoading) ? 0.5 : 1
-            }} onMouseEnter={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(255, 193, 7, 0.15)';
-                e.target.style.borderColor = 'rgba(255, 193, 7, 0.5)';
-              }
-            }} onMouseLeave={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(255, 193, 7, 0.08)';
-                e.target.style.borderColor = 'rgba(255, 193, 7, 0.3)';
-              }
-            }}>
-              {refinementLoading ? '⏳' : '🌴'} More Relaxed
-            </button>
-            
-            <button onClick={async () => {
-              if (aiLoading || refinementLoading) return;
-              
-              setRefinementLoading(true);
-              
-              const refinedResult = await refineItineraryWithAI({
-                tripPlan: lastPlan,
-                refinementType: 'add-day'
-              });
-              
-              const currentDays = lastPlan.parsed?.numberOfDays || 3;
-              const newTotalDays = currentDays + 1;
-              
-              if (refinedResult && refinedResult.itinerary) {
-                // Update plan with AI-refined itinerary (now includes the extra day)
-                const updatedPlan = {
-                  ...lastPlan,
-                  parsed: {
-                    ...lastPlan.parsed,
-                    numberOfDays: newTotalDays
-                  },
-                  itinerary: {
-                    ...lastPlan.itinerary,
-                    days: newTotalDays,
-                    plan: refinedResult.itinerary.map(day => ({
-                      day: day.day,
-                      activity: `${day.title}. ${day.plan}`,
-                      purpose: day.day === 1 ? 'travel' : 
-                               day.day === newTotalDays ? 'travel' : 
-                               day.day <= Math.ceil((newTotalDays - 2) * 0.7) + 1 ? 'explore' : 'relax'
-                    }))
-                  }
-                };
-                setLastPlan(updatedPlan);
-                setTripContext(prev => ({...prev, days: newTotalDays}));
-                
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Add one more day' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: `I've added one more day to your trip. Check the new day above.` 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
-              } else {
-                // Fallback to simple update
-                const newDayActivity = {
-                  day: currentDays,
-                  activity: 'Bonus day to revisit favorite spots or discover something new',
-                  purpose: 'explore'
-                };
-                
-                const updatedPlan = lastPlan.itinerary?.plan ? [...lastPlan.itinerary.plan] : [];
-                updatedPlan.splice(updatedPlan.length - 1, 0, newDayActivity);
-                
-                if (updatedPlan.length > 0) {
-                  updatedPlan[updatedPlan.length - 1] = {
-                    ...updatedPlan[updatedPlan.length - 1],
-                    day: newTotalDays
+              <h3 style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: '#64748b',
+                marginBottom: 16
+              }}>
+                Trip Rhythm
+              </h3>
+              <div style={{
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap',
+                alignItems: 'center'
+              }}>
+                {lastPlan.itinerary.plan.map((dayData, idx) => {
+                  // Detect theme for each day
+                  const activities = dayData.activity.split('\n\n');
+                  const title = activities[0] || '';
+                  const titleLower = title.toLowerCase();
+                  
+                  let theme = 'Explore';
+                  if (titleLower.includes('arrival') || titleLower.includes('arrive')) theme = 'Arrival';
+                  else if (titleLower.includes('departure') || titleLower.includes('depart')) theme = 'Departure';
+                  else if (titleLower.includes('culture') || titleLower.includes('temple') || titleLower.includes('museum')) theme = 'Culture';
+                  else if (titleLower.includes('relax') || titleLower.includes('beach') || titleLower.includes('spa')) theme = 'Relax';
+                  else if (titleLower.includes('food') || titleLower.includes('culinary') || titleLower.includes('market')) theme = 'Food';
+                  
+                  const icons = {
+                    'Arrival': '✈️',
+                    'Departure': '🏠',
+                    'Explore': '🗺️',
+                    'Relax': '🌴',
+                    'Culture': '🎭',
+                    'Food': '🍽️'
                   };
-                }
-                
-                const updatedLastPlan = {
-                  ...lastPlan,
-                  parsed: {
-                    ...lastPlan.parsed,
-                    numberOfDays: newTotalDays
-                  },
-                  itinerary: {
-                    ...lastPlan.itinerary,
-                    days: newTotalDays,
-                    plan: updatedPlan
+                  const icon = icons[theme] || '🗺️';
+                  
+                  return (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '8px 14px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 6,
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#ffffff';
+                      e.currentTarget.style.borderColor = '#cbd5e1';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f8fafc';
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                    }}>
+                      <span style={{ fontSize: 20 }}>{icon}</span>
+                      <span style={{ 
+                        fontSize: 13, 
+                        fontWeight: 500,
+                        color: '#0f172a'
+                      }}>
+                        Day {dayData.day}
+                      </span>
+                      <span style={{ 
+                        fontSize: 11, 
+                        color: '#64748b',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.03em'
+                      }}>
+                        {theme}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Why This Plan Works - Confidence Signals */}
+          {aiExplanation && aiExplanation.length > 0 && (
+            <div style={{
+              marginBottom: 32,
+              paddingBottom: 32,
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#64748b',
+                marginBottom: 16,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                Why this works
+              </div>
+              <div style={{
+                display: 'flex',
+                gap: 12,
+                flexWrap: 'wrap'
+              }}>
+                {aiExplanation.map((reason, index) => {
+                  // Extract confidence signal from text
+                  let icon = '✓';
+                  let label = reason;
+                  
+                  const text = reason.toLowerCase();
+                  if (text.includes('time') || text.includes('rushing') || text.includes('pace') || text.includes('relaxed')) {
+                    icon = '⏱️';
+                    label = 'Not rushed';
+                  } else if (text.includes('fresh') || text.includes('arrive') || text.includes('flight') || text.includes('morning')) {
+                    icon = '☀️';
+                    label = 'Fresh arrival';
+                  } else if (text.includes('center') || text.includes('central') || text.includes('stay') || text.includes('location')) {
+                    icon = '🏨';
+                    label = 'Central stay';
+                  } else if (text.includes('access') || text.includes('easy') || text.includes('convenient') || text.includes('walkable')) {
+                    icon = '🧭';
+                    label = 'Easy access';
+                  } else if (text.includes('days') || text.includes('duration') || text.includes('enough')) {
+                    icon = '📅';
+                    label = 'Perfect duration';
+                  } else if (text.includes('balance') || text.includes('mix')) {
+                    icon = '⚖️';
+                    label = 'Balanced days';
+                  } else if (text.includes('direct') || text.includes('connection')) {
+                    icon = '✈️';
+                    label = 'Direct flights';
+                  } else if (text.includes('price') || text.includes('rate') || text.includes('budget')) {
+                    icon = '💰';
+                    label = 'Good value';
+                  } else {
+                    // Generic extraction - take first 2-3 words
+                    const words = reason.split(' ').slice(0, 3).join(' ');
+                    label = words.length > 20 ? words.substring(0, 20) : words;
                   }
-                };
+                  
+                  return (
+                    <div 
+                      key={index} 
+                      title={reason}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '8px 16px',
+                        background: '#f8fafc',
+                        borderRadius: 8,
+                        border: '1px solid #e2e8f0',
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: '#475569',
+                        cursor: 'help',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#ffffff';
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#f8fafc';
+                        e.currentTarget.style.borderColor = '#e2e8f0';
+                      }}
+                    >
+                      <span style={{ fontSize: 16 }}>{icon}</span>
+                      <span>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. FLIGHT & HOTEL DECISION CARDS */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isDesktop ? '1fr 1fr' : '1fr',
+          gap: 24,
+          marginBottom: 48,
+          paddingBottom: 48,
+          borderBottom: '1px solid #e2e8f0'
+        }}>
+          {/* Flight Decision Card */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            padding: 24,
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#cbd5e1';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#e2e8f0';
+            e.currentTarget.style.boxShadow = 'none';
+          }}>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#64748b',
+              marginBottom: 16,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              ✈️ Best Flight for This Trip
+            </div>
+            
+            {/* Flight Structured Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {(() => {
+                // Parse flight recommendation into structured format
+                const flightText = (flightRec || `Direct flights from ${parsed.sourceCity || 'your city'} to ${parsed.destinationCity}`).toLowerCase();
                 
-                setLastPlan(updatedLastPlan);
-                setTripContext(prev => ({...prev, days: newTotalDays}));
+                let timing = 'Morning';
+                let flightType = 'Direct';
+                let benefit = 'Optimal timing';
                 
-                const userMsg = { id: Date.now(), sender: 'user', text: 'Add one more day' };
-                const botMsg = { 
-                  id: Date.now() + 1, 
-                  sender: 'bot', 
-                  text: `I've added one more day. Check above.` 
-                };
-                setMessages(prev => [...prev, userMsg, botMsg]);
+                if (flightText.includes('morning') || flightText.includes('early')) timing = 'Morning';
+                else if (flightText.includes('afternoon') || flightText.includes('midday')) timing = 'Afternoon';
+                else if (flightText.includes('evening') || flightText.includes('late')) timing = 'Evening';
+                
+                if (flightText.includes('stop') || flightText.includes('connect')) flightType = '1 Stop';
+                if (flightText.includes('direct') || flightText.includes('nonstop')) flightType = 'Direct';
+                
+                if (flightText.includes('relax') || flightText.includes('arrive fresh')) benefit = 'Arrive relaxed';
+                else if (flightText.includes('rush') || flightText.includes('avoid')) benefit = 'Avoid rush';
+                else if (flightText.includes('rest') || flightText.includes('sleep')) benefit = 'Time to rest';
+                else if (flightText.includes('best') || flightText.includes('optimal')) benefit = 'Optimal timing';
+                else if (flightText.includes('price') || flightText.includes('rate') || flightText.includes('cheap')) benefit = 'Best rates';
+                
+                return (
+                  <>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 12
+                    }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>Timing</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{timing}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>Type</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{flightType}</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>Benefit</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>{benefit}</div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+            
+            {/* Confidence Badges */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, padding: '6px 12px', background: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: 4, color: '#15803d' }}>✓ Time-optimized</div>
+              <div style={{ fontSize: 11, padding: '6px 12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 4, color: '#d97706' }}>⚡ Good rates</div>
+            </div>
+          </div>
+
+          {/* Hotel Decision Card */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 8,
+            padding: 24,
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = '#cbd5e1';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = '#e2e8f0';
+            e.currentTarget.style.boxShadow = 'none';
+          }}>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#64748b',
+              marginBottom: 16,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em'
+            }}>
+              🏨 Stay Recommendation
+            </div>
+            
+            {/* Hotel Structured Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {hotelsList && hotelsList.length > 0 ? (
+                // Show AI-recommended hotels list
+                <div>
+                  <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 8 }}>Recommended Hotels</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {hotelsList.slice(0, 3).map((hotel, idx) => (
+                      <div key={idx} style={{
+                        padding: 10,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 4
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 2 }}>{hotel.name}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4 }}>{hotel.area} • {hotel.type}</div>
+                        <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic' }}>{hotel.highlight}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                // Fallback: Show parsed recommendation
+                <>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>Area</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
+                      {(() => {
+                        const hotelText = (hotelRec || `Stay in central ${parsed.destinationCity}`).toLowerCase();
+                        if (hotelText.includes('beach')) return 'Beach area';
+                        else if (hotelText.includes('old city') || hotelText.includes('historic')) return 'Old City';
+                        else if (hotelText.includes('market') || hotelText.includes('bazaar')) return 'Market District';
+                        else if (hotelText.includes('riverside') || hotelText.includes('river')) return 'Riverside';
+                        else if (hotelText.includes('downtown') || hotelText.includes('center')) return 'Downtown';
+                        else return 'Central ' + parsed.destinationCity;
+                      })()}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 6 }}>Why this works</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
+                      {(() => {
+                        const hotelText = (hotelRec || '').toLowerCase();
+                        if (hotelText.includes('easy') || hotelText.includes('convenient')) return 'Easy access';
+                        else if (hotelText.includes('explore') || hotelText.includes('attraction')) return 'Near attractions';
+                        else if (hotelText.includes('central')) return 'Central location';
+                        else if (hotelText.includes('local') || hotelText.includes('authentic')) return 'Local experience';
+                        else return 'Perfect location';
+                      })()}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Confidence Badges */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, padding: '6px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 4, color: '#374151' }}>📍 Central location</div>
+              <div style={{ fontSize: 11, padding: '6px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 4, color: '#374151' }}>✓ Verified</div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. ITINERARY */}
+        <div style={{
+          marginBottom: 48
+        }}>
+          <h2 style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: '#64748b',
+            marginBottom: 24,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>
+            Daily Plan
+          </h2>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(280px, 1fr))' : '1fr',
+            gap: 16
+          }}>
+            {days.map((day, index) => {
+              const isExpanded = expandedDay === day.day;
+              const activityText = day.activity || '';
+              const activities = activityText.split('\n').filter(line => line.trim());
+              
+              // Extract theme from title
+              let theme = 'Explore';
+              let dayTitle = activities[0] || `Day ${day.day}`;
+              if (dayTitle.toLowerCase().includes('arrival')) theme = 'Arrival';
+              else if (dayTitle.toLowerCase().includes('departure') || dayTitle.toLowerCase().includes('leisurely morning')) theme = 'Departure';
+              else if (dayTitle.toLowerCase().includes('relax') || dayTitle.toLowerCase().includes('leisure')) theme = 'Relax';
+              else if (dayTitle.toLowerCase().includes('culture') || dayTitle.toLowerCase().includes('local')) theme = 'Culture';
+              else if (dayTitle.toLowerCase().includes('landmark') || dayTitle.toLowerCase().includes('iconic')) theme = 'Explore';
+              else if (dayTitle.toLowerCase().includes('food') || dayTitle.toLowerCase().includes('market')) theme = 'Food';
+              
+              // Get icon based on theme
+              const icons = {
+                'Arrival': '✈️',
+                'Departure': '🏠',
+                'Explore': '🗺️',
+                'Relax': '🌴',
+                'Culture': '🎭',
+                'Food': '🍽️'
+              };
+              const icon = icons[theme] || '🗺️';
+              
+              // Parse activity text into time blocks
+              const detailLines = activities.slice(1);
+              const fullText = detailLines.join(' ');
+              
+              // Helper: Truncate at word boundary, but show complete sentences if short
+              const truncateAtWord = (text, maxLength = 200) => {
+                if (!text || text.length <= maxLength) return text;
+                const truncated = text.substring(0, maxLength);
+                const lastSpace = truncated.lastIndexOf(' ');
+                if (lastSpace > 50) { // Only truncate if we have substantial text
+                  return truncated.substring(0, lastSpace).trim() + '...';
+                }
+                return truncated.trim() + '...';
+              };
+              
+              // Smart parsing: extract meaningful action phrases
+              let timeBlocks = [];
+              
+              // Method 1: Look for explicit time mentions - more flexible matching
+              const morningMatch = fullText.match(/(?:morning|early|dawn)[:\s,]*([^.!?]*?)(?=\s*(?:afternoon|lunch|midday|then|and then|In the afternoon|later|evening|$))/i);
+              const afternoonMatch = fullText.match(/(?:afternoon|lunch|midday)[:\s,]*([^.!?]*?)(?=\s*(?:evening|dinner|night|then|and then|In the evening|later|$))/i);
+              const eveningMatch = fullText.match(/(?:evening|night|dinner|dusk)[:\s,]*([^.!?]*?)(?=\s*(?:\.|$))/i);
+              
+              if (morningMatch || afternoonMatch || eveningMatch) {
+                if (morningMatch && morningMatch[1].trim().length > 0) {
+                  const text = morningMatch[1].trim();
+                  const cleaned = text.split(/[,;]/).map(s => s.trim()).filter(s => s.length > 3);
+                  const activity = cleaned.length > 0 ? truncateAtWord(cleaned.join(', ')) : 'Explore and enjoy';
+                  timeBlocks.push({ 
+                    time: 'Morning', 
+                    activity: activity,
+                    icon: '☀️' 
+                  });
+                }
+                if (afternoonMatch && afternoonMatch[1].trim().length > 0) {
+                  const text = afternoonMatch[1].trim();
+                  const cleaned = text.split(/[;]/).map(s => s.trim()).filter(s => s.length > 3);
+                  const activity = cleaned.length > 0 ? truncateAtWord(cleaned.join(', ')) : 'Explore and relax';
+                  timeBlocks.push({ 
+                    time: 'Afternoon', 
+                    activity: activity,
+                    icon: '🌤️' 
+                  });
+                }
+                if (eveningMatch && eveningMatch[1].trim().length > 0) {
+                  const text = eveningMatch[1].trim();
+                  const cleaned = text.split(/[;]/).map(s => s.trim()).filter(s => s.length > 3);
+                  const activity = cleaned.length > 0 ? truncateAtWord(cleaned.join(', ')) : 'Dinner and relax';
+                  timeBlocks.push({ 
+                    time: 'Evening', 
+                    activity: activity,
+                    icon: '🌙' 
+                  });
+                }
+              } else {
+                // Method 2: Split by sentences and distribute across time periods
+                const sentences = fullText
+                  .split(/[.!?]+/)
+                  .map(s => s.trim())
+                  .filter(s => s.length > 15);
+                
+                if (sentences.length >= 3) {
+                  // Take key parts from each sentence
+                  const extractKeyPhrase = (sentence) => {
+                    // Remove common starting words
+                    let cleaned = sentence
+                      .replace(/^(Arrive in|Check into|Visit|Explore|Enjoy|Spend|Take|Relax at|Have|End|Start with|Begin)\s+/i, '')
+                      .replace(/^(the|a|an|your|some)\s+/i, '');
+                    
+                    return truncateAtWord(cleaned.trim());
+                  };
+                  
+                  timeBlocks = [
+                    { time: 'Morning', activity: extractKeyPhrase(sentences[0]), icon: '☀️' },
+                    { time: 'Afternoon', activity: extractKeyPhrase(sentences[Math.floor(sentences.length / 2)]), icon: '🌤️' },
+                    { time: 'Evening', activity: extractKeyPhrase(sentences[sentences.length - 1]), icon: '🌙' }
+                  ];
+                } else if (sentences.length === 2) {
+                  const extractKeyPhrase = (sentence) => {
+                    let cleaned = sentence.replace(/^(Arrive in|Check into|Visit|Explore|Enjoy|Spend|Take|Relax at|Have|End|Start with|Begin)\s+/i, '');
+                    return truncateAtWord(cleaned.trim());
+                  };
+                  
+                  timeBlocks = [
+                    { time: 'Morning', activity: extractKeyPhrase(sentences[0]), icon: '☀️' },
+                    { time: 'Evening', activity: extractKeyPhrase(sentences[1]), icon: '🌙' }
+                  ];
+                } else if (sentences.length === 1) {
+                  timeBlocks = [{ time: 'All Day', activity: truncateAtWord(sentences[0]), icon: '🗓️' }];
+                }
               }
               
-              setRefinementLoading(false);
-            }} 
-            disabled={aiLoading || refinementLoading}
-            style={{
-              padding: '10px 10px',
-              borderRadius: 6,
-              border: (aiLoading || refinementLoading) ? '1px solid rgba(244, 67, 54, 0.15)' : '1px solid rgba(244, 67, 54, 0.3)',
-              background: (aiLoading || refinementLoading) ? 'rgba(244, 67, 54, 0.03)' : 'rgba(244, 67, 54, 0.08)',
-              color: (aiLoading || refinementLoading) ? '#6b4342' : '#ef5350',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: (aiLoading || refinementLoading) ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: (aiLoading || refinementLoading) ? 0.5 : 1
-            }} onMouseEnter={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(244, 67, 54, 0.15)';
-                e.target.style.borderColor = 'rgba(244, 67, 54, 0.5)';
-              }
-            }} onMouseLeave={(e) => {
-              if (!aiLoading && !refinementLoading) {
-                e.target.style.background = 'rgba(244, 67, 54, 0.08)';
-                e.target.style.borderColor = 'rgba(244, 67, 54, 0.3)';
-              }
-            }}>
-              {refinementLoading ? '⏳' : '➕'} Add 1 Day
+              // Filter out empty activities
+              timeBlocks = timeBlocks.filter(block => block.activity && block.activity.length > 3);
+              
+              return (
+                <div
+                  key={day.day}
+                  onClick={() => handleDayClick(day.day)}
+                  style={{
+                    background: '#ffffff',
+                    border: isExpanded ? '2px solid #0f172a' : '1px solid #e2e8f0',
+                    borderRadius: 12,
+                    padding: 20,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isExpanded) {
+                      e.currentTarget.style.borderColor = '#cbd5e1';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isExpanded) {
+                      e.currentTarget.style.borderColor = '#e2e8f0';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }
+                  }}
+                >
+                  {/* Day Number Badge */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 16,
+                    right: 16,
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: isExpanded ? '#0f172a' : '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: isExpanded ? '#ffffff' : '#64748b'
+                  }}>
+                    {day.day}
+                  </div>
+
+                  {/* Icon */}
+                  <div style={{
+                    fontSize: 32,
+                    marginBottom: 12
+                  }}>
+                    {icon}
+                  </div>
+
+                  {/* Theme Label */}
+                  <div style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    marginBottom: 16
+                  }}>
+                    {theme}
+                  </div>
+
+                  {/* Time-based Timeline */}
+                  {timeBlocks.length > 0 && (
+                    <div style={{
+                      position: 'relative',
+                      paddingLeft: 24
+                    }}>
+                      {/* Vertical line */}
+                      <div style={{
+                        position: 'absolute',
+                        left: 8,
+                        top: 8,
+                        bottom: 8,
+                        width: 2,
+                        background: '#e2e8f0'
+                      }} />
+                      
+                      {timeBlocks.map((block, i) => (
+                        <div key={i} style={{
+                          position: 'relative',
+                          marginBottom: i < timeBlocks.length - 1 ? 16 : 0
+                        }}>
+                          {/* Dot on timeline */}
+                          <div style={{
+                            position: 'absolute',
+                            left: -16,
+                            top: 4,
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            background: '#0f172a',
+                            border: '2px solid #ffffff'
+                          }} />
+                          
+                          <div style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            color: '#94a3b8',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: 4,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4
+                          }}>
+                            <span>{block.icon}</span>
+                            <span>{block.time}</span>
+                          </div>
+                          <div style={{
+                            fontSize: isExpanded ? 14 : 13,
+                            color: '#475569',
+                            lineHeight: 1.5
+                          }}>
+                            {block.activity}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Click hint */}
+                  {!isExpanded && (
+                    <div style={{
+                      fontSize: 11,
+                      color: '#94a3b8',
+                      marginTop: 16,
+                      fontStyle: 'italic'
+                    }}>
+                      Click for full details
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4. BOOKING SECTION */}
+        <div style={{
+          paddingTop: 48,
+          borderTop: '1px solid #e2e8f0'
+        }}>
+          <h3 style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: '#64748b',
+            marginBottom: 24,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>
+            Book Your Trip
+          </h3>
+
+          {/* Booking Actions */}
+          <div style={{
+            display: 'flex',
+            gap: 16,
+            flexWrap: 'wrap'
+          }}>
+            <button
+              onClick={() => {
+                const dest = parsed.destinationCity || '';
+                const src = parsed.sourceCity || '';
+                const today = new Date();
+                const start = today.toISOString().slice(0, 10);
+                const flightUrl = src 
+                  ? `https://www.google.com/search?q=flights+from+${encodeURIComponent(src)}+to+${encodeURIComponent(dest)}+${start}`
+                  : `https://www.google.com/search?q=flights+to+${encodeURIComponent(dest)}+${start}`;
+                window.open(flightUrl, '_blank');
+              }}
+              style={{
+                padding: '14px 28px',
+                borderRadius: 6,
+                background: '#0f172a',
+                border: 'none',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.target.style.opacity = '1'}
+            >
+              Book Flight
+            </button>
+            <button
+              onClick={() => {
+                const dest = parsed.destinationCity || '';
+                const days = parsed.numberOfDays || '';
+                const today = new Date();
+                const start = today.toISOString().slice(0, 10);
+                let end = start;
+                if (days && Number(days) > 0) {
+                  const endDate = new Date(today);
+                  endDate.setDate(today.getDate() + Number(days));
+                  end = endDate.toISOString().slice(0, 10);
+                }
+                const hotelUrl = `https://www.google.com/search?q=hotels+in+${encodeURIComponent(dest)}+${start}+to+${end}`;
+                window.open(hotelUrl, '_blank');
+              }}
+              style={{
+                padding: '14px 28px',
+                borderRadius: 6,
+                background: '#0f172a',
+                border: 'none',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.opacity = '0.8'}
+              onMouseLeave={(e) => e.target.style.opacity = '1'}
+            >
+              Book Hotel
             </button>
           </div>
         </div>
       </div>
-      </div>
-
-      {/* Mobile action bar - only on mobile */}
-      {!isDesktop && (
-        <div style={{
-          position: 'sticky',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-          background: 'linear-gradient(180deg, #1e2227, #191c20)',
-          padding: '12px 16px',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          gap: 10,
-          zIndex: 30,
-          flexShrink: 0,
-          boxShadow: '0 -6px 16px rgba(0,0,0,0.25)'
-        }}>
-          <button
-            onClick={handleSaveTrip}
-            style={{
-              flex: '1',
-              maxWidth: '180px',
-              padding: '12px 16px',
-              borderRadius: 8,
-              background: saveSuccess ? 'linear-gradient(90deg, #388e3c, #66bb6a)' : 'rgba(25, 118, 210, 0.2)',
-              border: saveSuccess ? 'none' : '1px solid rgba(25, 118, 210, 0.4)',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              boxShadow: saveSuccess ? '0 2px 8px rgba(56, 142, 60, 0.3)' : '0 2px 8px rgba(25, 118, 210, 0.2)'
-            }}
-          >
-            {saveSuccess ? '✓ Saved' : '💾 Save'}
-          </button>
-          
-          <button
-            onClick={() => {
-              const dest = lastPlan.parsed?.destinationCity || '';
-              const today = new Date();
-              const start = today.toISOString().slice(0,10);
-              const flightUrl = `https://www.google.com/search?q=flights+to+${encodeURIComponent(dest)}+${start}`;
-              window.open(flightUrl, '_blank');
-            }}
-            style={{
-              flex: '1',
-              maxWidth: '180px',
-              padding: '12px 16px',
-              borderRadius: 8,
-              background: 'linear-gradient(90deg, #1976d2, #2196f3)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              boxShadow: '0 2px 8px rgba(25, 118, 210, 0.3)'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(25, 118, 210, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 2px 8px rgba(25, 118, 210, 0.3)';
-            }}
-          >
-            ✈️ Flight
-          </button>
-          
-          <button
-            onClick={() => {
-              const dest = lastPlan.parsed?.destinationCity || '';
-              const days = lastPlan.parsed?.numberOfDays || '';
-              const today = new Date();
-              const start = today.toISOString().slice(0,10);
-              let end = start;
-              if (days && Number(days) > 0) {
-                const endDate = new Date(today);
-                endDate.setDate(today.getDate() + Number(days));
-                end = endDate.toISOString().slice(0,10);
-              }
-              const hotelUrl = `https://www.google.com/search?q=hotels+in+${encodeURIComponent(dest)}+${start}+to+${end}`;
-              window.open(hotelUrl, '_blank');
-            }}
-            style={{
-              flex: '1',
-              maxWidth: '180px',
-              padding: '12px 16px',
-              borderRadius: 8,
-              background: 'linear-gradient(90deg, #388e3c, #66bb6a)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              boxShadow: '0 2px 8px rgba(56, 142, 60, 0.3)'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 4px 12px rgba(56, 142, 60, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 2px 8px rgba(56, 142, 60, 0.3)';
-            }}
-          >
-            🏨 Hotel
-          </button>
-          
-          <button
-            onClick={() => {
-              setShowAssistant(true);
-            }}
-            style={{
-              flex: '1',
-              maxWidth: '180px',
-              padding: '12px 16px',
-              borderRadius: 8,
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(255, 255, 255, 0.15)',
-              color: '#e3e6eb',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.12)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.background = 'rgba(255, 255, 255, 0.08)';
-              e.target.style.borderColor = 'rgba(255, 255, 255, 0.15)';
-            }}
-          >
-            ✏️ Refine
-          </button>
-        </div>
-      )}
     </div>
-  );
-}
-
-function BookButtons({ destination, days }) {
-  const [hover, setHover] = React.useState('');
-  if (!destination) return null;
-  const today = new Date();
-  const start = today.toISOString().slice(0, 10);
-  let end = start;
-  if (days && days > 0) {
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + Number(days));
-    end = endDate.toISOString().slice(0, 10);
-  }
-  const flightUrl = `https://www.google.com/search?q=flights+to+${encodeURIComponent(destination)}+${start}`;
-  const hotelUrl = `https://www.google.com/search?q=hotels+in+${encodeURIComponent(destination)}+${start}+to+${end}`;
-
-  const btnBase = {
-    display: 'inline-block',
-    minWidth: 120,
-    padding: '14px 0',
-    borderRadius: 9,
-    fontWeight: 600,
-    fontSize: 16,
-    textAlign: 'center',
-    textDecoration: 'none',
-    transition: 'background 0.18s, box-shadow 0.18s',
-    boxShadow: '0 2px 8px #0002',
-    outline: 'none',
-    border: 'none',
-    margin: 0,
-    cursor: 'pointer',
-    marginRight: 6
-  };
-
-  const flightBtn = {
-    ...btnBase,
-    background: 'linear-gradient(90deg, #1976d2 60%, #2196f3 100%)',
-    color: '#fff',
-    border: '1.5px solid #1565c0',
-  };
-  const hotelBtn = {
-    ...btnBase,
-    background: 'linear-gradient(90deg, #388e3c 60%, #66bb6a 100%)',
-    color: '#fff',
-    border: '1.5px solid #2e7d32',
-  };
-
-  const flightHover = {
-    background: 'linear-gradient(90deg, #2196f3 60%, #1976d2 100%)',
-    boxShadow: '0 4px 16px #1976d255',
-  };
-  const hotelHover = {
-    background: 'linear-gradient(90deg, #66bb6a 60%, #388e3c 100%)',
-    boxShadow: '0 4px 16px #388e3c55',
-  };
-
-  return (
-    <>
-      <a
-        href={flightUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={hover === 'flight' ? { ...flightBtn, ...flightHover } : flightBtn}
-        onMouseEnter={() => setHover('flight')}
-        onMouseLeave={() => setHover('')}
-      >
-        Book Flight
-      </a>
-      <a
-        href={hotelUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={hover === 'hotel' ? { ...hotelBtn, ...hotelHover } : hotelBtn}
-        onMouseEnter={() => setHover('hotel')}
-        onMouseLeave={() => setHover('')}
-      >
-        Book Hotel
-      </a>
-    </>
   );
 }
 
